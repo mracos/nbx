@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Delete a step and its slot (no arg = last step)
+nbx_cmd_delete() {
+  local args="$1"
+  # No arg: delete last step (replaces old 'back' command)
+  if [[ -z "$args" ]]; then
+    local depth
+    depth=$(nbx_history_depth)
+    [[ "$depth" -eq 0 ]] && { info "Nothing to delete"; return 0; }
+    args="$depth"
+  fi
+  nbx_get_history "$args" >/dev/null 2>&1 || { warn "Step $args not found"; return 1; }
+  local del_slot
+  del_slot=$(nbx_history_field "$args" slot)
+  if nbx_delete_history "$args"; then
+    nbx_mark_dirty
+    plain "Deleted step [$args] ($(slot "${del_slot#\$}"))"
+  else
+    warn "Can't delete step $args"
+    return 1
+  fi
+}

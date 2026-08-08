@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Edit pipeline in $EDITOR, replay on save
+nbx_cmd_bulk() {
+  local tmpfile="$NBX_DIR/.bulk_edit"
+
+  # Pre-fill with current notebook summary (if any)
+  : > "$tmpfile"
+  local depth
+  depth=$(nbx_history_depth)
+  if [[ "$depth" -gt 0 ]]; then
+    local i
+    for ((i = 1; i <= depth; i++)); do
+      local input query slot type label
+      input=$(nbx_history_field "$i" input)
+      query=$(nbx_history_field "$i" query)
+      slot=$(nbx_history_field "$i" slot)
+      type=$(nbx_history_field "$i" type)
+      label=$(nbx_input_label "$input")
+      echo "$label -> $query -> \$${slot#\$}" >> "$tmpfile"
+    done
+  fi
+  cat >> "$tmpfile" <<'COMMENT'
+
+# Bulk edit: one step per line. Lines starting with # are ignored.
+# Delete all lines to cancel. Save and quit to apply.
+#
+# Grammar:
+#   step   = source " -> " filter " -> $" slot
+#   source = filename | "$" slot | "input"
+#   filter = jq_expression | literal_value
+#
+# Examples:
+#   input -> marcos@test.com -> $email
+#   users.json -> .[] | select(.email == $email) -> $user
+#   $user -> .name -> $name
+#   data.json -> [.[] | select(.age > 30 and .active)] -> $filtered
+# vim: ft=conf
+COMMENT
+
+  # Open editor
+  ${EDITOR:-vi} "$tmpfile" < /dev/tty > /dev/tty
+
+  # Check if there are any non-comment, non-empty lines
+  local has_steps=false
+  while IFS= read -r _line; do
+    [[ "$_line" == \#* || -z "$_line" ]] && continue
+    has_steps=true
+    break
+  done < "$tmpfile"
+
+  if $has_steps; then
+    nbx_bulk_replay "$tmpfile" && nbx_mark_dirty
+  else
+    info "No steps — notebook unchanged"
+  fi
+  rm -f "$tmpfile"
+}

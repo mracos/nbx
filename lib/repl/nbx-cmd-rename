@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Rename a slot
+nbx_cmd_rename() {
+  local args="$1"
+  if [[ -z "$args" ]]; then
+    plain "Usage: rename old new" >&2
+    return 1
+  fi
+  local old_name="${args%% *}"
+  local new_name="${args#* }"
+  old_name="${old_name#\$}"
+  new_name="${new_name#\$}"
+  if [[ "$old_name" =~ ^[0-9]+$ ]] && [[ -f "$NBX_DIR/history/$old_name" ]]; then
+    old_name=$(nbx_history_field "$old_name" slot)
+  fi
+  [[ "$old_name" == "$new_name" ]] && { plain "Usage: rename old new" >&2; return 1; }
+  local old_file="$NBX_DIR/slots/${old_name}.json"
+  [[ ! -f "$old_file" ]] && { warn "Slot not found: \$$old_name"; return 1; }
+  mv "$old_file" "$NBX_DIR/slots/${new_name}.json"
+  local hf
+  for hf in "$NBX_DIR/history"/*; do
+    [[ -f "$hf" ]] || continue
+    local h_input h_query h_slot h_type
+    IFS=$'\t' read -r h_input h_query h_slot h_type < "$hf"
+    [[ "$h_slot" == "$old_name" ]] && h_slot="$new_name"
+    if [[ "$h_input" == *"/slots/${old_name}.json" ]]; then
+      h_input="${h_input%/${old_name}.json}/${new_name}.json"
+    fi
+    local h_step="${hf##*/}"
+    nbx_set_history "$h_step" "$h_input" "$h_query" "$h_slot" "$h_type"
+  done
+  nbx_mark_dirty
+  plain "$(slot "$old_name") → $(slot "$new_name")"
+}

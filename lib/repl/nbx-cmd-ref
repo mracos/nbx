@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Show jq cheatsheet
+nbx_cmd_ref() {
+  nbx_show_ref "${1:-quick}"
+}

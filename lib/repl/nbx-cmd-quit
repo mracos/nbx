@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Exit nbx
+nbx_cmd_quit() {
+  exit 0
+}

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Toggle step visibility
+nbx_cmd_hide() {
+  local args="$1"
+  [[ -z "$args" ]] && { plain "Usage: hide N (toggles visibility)" >&2; return 1; }
+  nbx_get_history "$args" >/dev/null 2>&1 || { warn "Step $args not found"; return 1; }
+  local result
+  result=$(nbx_toggle_hidden "$args")
+  nbx_mark_dirty
+  info "Step [$args] $result"
+}

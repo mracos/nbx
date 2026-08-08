@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Duplicate a slot
+nbx_cmd_dup() {
+  local args="$1"
+  [[ -z "$args" ]] && { plain "Usage: dup \$slot [newname]" >&2; return 1; }
+  local dup_source="${args%% *}"
+  dup_source="${dup_source#\$}"
+  if [[ "$dup_source" =~ ^[0-9]+$ ]] && [[ -f "$NBX_DIR/history/$dup_source" ]]; then
+    dup_source=$(nbx_history_field "$dup_source" slot)
+  fi
+  [[ ! -f "$NBX_DIR/slots/${dup_source}.json" ]] && { warn "Slot not found: \$$dup_source"; return 1; }
+  local dup_target="${args#* }"
+  [[ "$dup_target" == "$args" || -z "$dup_target" ]] && dup_target=""
+  dup_target="${dup_target#\$}"
+  if [[ -z "$dup_target" ]]; then
+    dup_target=$(nbx_prompt_slot_name) || { warn "Cancelled"; return 1; }
+  fi
+  cp "$NBX_DIR/slots/${dup_source}.json" "$NBX_DIR/slots/${dup_target}.json"
+  nbx_push_history "$NBX_DIR/slots/${dup_source}.json" "dup \$${dup_source}" "$dup_target" "query"
+  nbx_mark_dirty
+  plain "$(slot "$dup_source") → $(slot "$dup_target") ($(nbx_slot_rows "$dup_target") rows)"
+}

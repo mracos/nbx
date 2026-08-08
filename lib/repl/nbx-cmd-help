@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Show available commands
+nbx_cmd_help() {
+  cat <<'EOF'
+
+  query [file|$slot|cmd]        Pick a source or run a command, write jq filter live
+  pick [$slot]                  Select specific rows from results
+  set name value                Create a slot from a value (JSON or string)
+  show [slot...|-l]             View slot contents (-l lists all with preview)
+  pin [$slot|N|off]             Pin a slot to the bottom of the display
+  edit N                        Re-edit step N (focus mode when pinned, ctrl-s=switch)
+  undo [N]                      Revert last edit (or the edit on step N)
+  replay [N|--stale|--from N]   Re-run step(s), mark dependents stale
+  rename old new                Rename a slot
+  hide N                        Toggle step visibility
+  delete [N]                    Delete step N and its slot (no arg = last)
+  dup $slot [name]              Duplicate a slot
+  move N up|down|TO             Reorder a step
+  refresh [source]              Re-run a command source, re-capture (no arg = all)
+  bulk                          Edit the pipeline in $EDITOR, replay on save
+  ref [full]                    jq cheatsheet
+  save [name.ipynb]             Save notebook (new name = save as)
+  reset                         Clear notebook
+  help                          This help
+  quit                          Exit
+
+  All $slots are available as variables in jq expressions.
+  Shortcuts: q=query  s=show  e=edit  d=delete  r=ref
+  Ctrl-L clears screen.
+
+EOF
+}

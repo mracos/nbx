@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Re-edit a previous query, pick, or input step
+# When a slot is pinned and the step is a query/pipe, enters focus mode
+# with live preview and step-switching (Ctrl-S).
+nbx_cmd_edit() {
+  local step_num="$1"
+  [[ -z "$step_num" ]] && { warn "Usage: edit N"; return 1; }
+  nbx_get_history "$step_num" >/dev/null || { warn "Step $step_num not found"; return 1; }
+  local input query slot type
+  input=$(nbx_history_field "$step_num" input)
+  query=$(nbx_history_field "$step_num" query)
+  slot=$(nbx_history_field "$step_num" slot)
+  type=$(nbx_history_field "$step_num" type)
+
+  # Input steps: inline re-edit (no focus mode)
+  if [[ "$type" == "input" ]]; then
+    nbx_backup_step "$step_num"
+    local new_value
+    if [[ -t 0 ]]; then
+      read -e -r -p "set \$$slot = " -i "$query" new_value || return 1
+    else
+      read -r new_value || return 1
+    fi
+    [[ -z "$new_value" ]] && { warn "Cancelled"; return 1; }
+    if echo "$new_value" | jq '.' &>/dev/null; then
+      echo "$new_value" | jq '.' | nbx_save_slot "$slot"
+    else
+      jq -n --arg v "$new_value" '$v' | nbx_save_slot "$slot"
+    fi
+    nbx_set_history "$step_num" "input" "$new_value" "$slot" "input"
+    nbx_mark_dirty
+    nbx_clear_stale "$step_num"
+    nbx_propagate_staleness "$step_num"
+    result "$slot" "= $(head -c 60 "$NBX_DIR/slots/${slot}.json")"
+    nbx_prompt_replay_stale
+    return
+  fi
+
+  [[ ! -f "$input" ]] && { warn "Source file no longer exists"; return 1; }
+
+  # Pick steps: re-open interactive picker (no focus mode)
+  if [[ "$type" == "pick" ]]; then
+    nbx_backup_step "$step_num"
+    local selected
+    selected=$(nbx_fzf_pick "$input") || return 1
+    local new_filter new_data new_count
+    new_filter=$(echo "$selected" | _nbx_pick_indices_to_filter)
+    new_count=$(echo "$selected" | wc -l | tr -d ' ')
+    if [[ "$new_count" -eq 1 ]]; then
+      new_data=$(echo "$selected" | sed 's/^[0-9]*://')
+    else
+      new_data=$(echo "$selected" | sed 's/^[0-9]*://' | jq -s '.')
+    fi
+    echo "$new_data" | nbx_save_slot "$slot"
+    nbx_set_history "$step_num" "$input" "$new_filter" "$slot" "pick"
+    nbx_mark_dirty
+    nbx_clear_stale "$step_num"
+    nbx_propagate_staleness "$step_num"
+    plain "Updated [$step_num] → $(slot "$slot") ($(nbx_slot_rows "$slot") rows)"
+    nbx_prompt_replay_stale
+    return
+  fi
+
+  # Query/pipe steps: use focus mode (live pinned preview + step switching)
+  # Auto-pin last step if nothing pinned
+  local pinned
+  pinned=$(nbx_pinned_slot) || true
+  if [[ -z "$pinned" ]]; then
+    local depth
+    depth=$(nbx_history_depth)
+    if [[ "$depth" -gt 0 ]]; then
+      local auto_slot
+      auto_slot=$(nbx_history_field "$depth" slot)
+      nbx_pin "$auto_slot"
+      pinned="$auto_slot"
+      local auto_step
+      auto_step=$(nbx_slot_to_step "$auto_slot" 2>/dev/null || echo "?")
+      plain "Auto-pinned $(slot "$auto_slot") [$auto_step]"
+    fi
+  fi
+
+  # Focus session loop
+  while true; do
+    nbx_get_history "$step_num" >/dev/null || { warn "Step $step_num not found"; return 1; }
+
+    input=$(nbx_history_field "$step_num" input)
+    query=$(nbx_history_field "$step_num" query)
+    slot=$(nbx_history_field "$step_num" slot)
+    type=$(nbx_history_field "$step_num" type)
+
+    [[ "$type" == "input" ]] && { warn "Use 'edit $step_num' for input steps"; return 1; }
+    [[ ! -f "$input" ]] && { warn "Source file no longer exists"; return 1; }
+
+    pinned=$(nbx_pinned_slot) || true
+
+    nbx_backup_step "$step_num"
+
+    local result_query
+    if [[ -n "$pinned" ]]; then
+      result_query=$(nbx_fzf_focus "$input" "$query" "$step_num" "$slot" "$pinned") || {
+        nbx_restore_step "$step_num"
+        return 0
+      }
+    else
+      result_query=$(nbx_fzf_query "$input" "$query" "editing [$step_num] → \$$slot") || {
+        nbx_restore_step "$step_num"
+        return 0
+      }
+    fi
+
+    local signal=""
+    if [[ "$result_query" == SWITCH:* ]]; then
+      signal="switch"
+      result_query="${result_query#SWITCH:}"
+    fi
+
+    # Apply the edit
+    nbx_jq_with_slots "$result_query" "$input" | nbx_save_slot "$slot"
+    nbx_set_history "$step_num" "$input" "$result_query" "$slot" "$type"
+    nbx_mark_dirty
+    nbx_clear_stale "$step_num"
+    nbx_propagate_staleness "$step_num"
+
+    # Auto-replay stale when pinned
+    local stale
+    stale=$(nbx_stale_steps)
+    if [[ -n "$stale" ]]; then
+      if nbx_is_pinned; then
+        nbx_cmd_replay "--stale" >/dev/null
+      else
+        nbx_prompt_replay_stale
+      fi
+    fi
+
+    plain "Applied [$step_num] → $(slot "$slot") ($(nbx_slot_rows "$slot") rows)"
+
+    if [[ "$signal" == "switch" ]]; then
+      local new_step
+      new_step=$(_nbx_pick_edit_step "$step_num") || return 0
+      step_num="$new_step"
+      continue
+    fi
+
+    # No pin or no switch signal: single edit, done
+    [[ -z "$pinned" ]] && return 0
+    # With pin: loop back for continued editing
+  done
+}
+
+# Pick a step to switch editing to
+_nbx_pick_edit_step() {
+  local current="$1"
+  local depth items=()
+  depth=$(nbx_history_depth)
+
+  local i
+  for ((i = 1; i <= depth; i++)); do
+    local s_type s_slot s_query
+    s_type=$(nbx_history_field "$i" type)
+    s_slot=$(nbx_history_field "$i" slot)
+    s_query=$(nbx_history_field "$i" query)
+    [[ "$s_type" == "input" ]] && continue
+    local marker=""
+    [[ "$i" == "$current" ]] && marker=" (current)"
+    items+=("[$i] \$$s_slot │ $s_query$marker")
+  done
+
+  [[ ${#items[@]} -eq 0 ]] && { warn "No editable steps"; return 1; }
+
+  local picked
+  picked=$(printf '%s\n' "${items[@]}" | \
+    fzf --no-sort \
+      --header "Switch focus to │ enter=select │ esc=cancel" \
+    ) || return 1
+
+  echo "$picked" | sed 's/\[//; s/\].*//'
+}

@@ -1,0 +1,109 @@
+# jq Quick Reference
+
+## Basics
+.                     Identity (passthrough)
+.foo                  Object field
+.foo.bar              Nested field
+.foo?                 Optional field (no error if missing)
+.[0]                  Array index
+.[-1]                 Last element
+.[2:5]                Array slice
+
+## Pipes & Filters
+.[] | .name           Iterate array, extract field
+select(.age > 30)     Filter elements
+select(.a and .b)     Filter with AND
+select(.a or .b)      Filter with OR
+select(.a | not)      Filter with NOT
+select(.name|test("^A"))  Filter by regex
+map(.name)            Transform array elements
+map(select(.active))  Filter + collect into array
+[.[] | select(.x)]    Same as map(select(...))
+empty                 Produce no output
+limit(N; expr)        Take first N results
+
+## Types & Conversion
+type                  Get type name
+tostring / tonumber   Convert types
+@csv                  Format as CSV
+@tsv                  Format as TSV
+@json                 Encode as JSON string
+@base64 / @base64d    Base64 encode/decode
+@html / @uri          HTML/URI encode
+
+## Object Construction
+{name: .name, age: .age}              Pick fields into new object
+{name, age}                           Shorthand (same keys)
+[.[] | {name, age}]                   Pick fields from array of objects
+{(.key): .value}                      Dynamic key from expression
+. + {status: "active"}                Add/overwrite a field
+{a: .x} * {b: .y}                    Merge into one object
+
+## Objects
+keys                  Get keys as array
+values                Get values as array
+has("foo")            Check key exists
+to_entries             {k:v} → [{key:k, value:v}]
+from_entries           Reverse of to_entries
+with_entries(f)        Transform entries
+del(.foo)             Delete a key
+
+## Arrays
+length                Array/string length
+first / last          First/last element
+flatten               Flatten nested arrays
+flatten(1)            Flatten one level deep
+map(split(","))|flatten  Split then unnest
+unique                Remove duplicates
+sort_by(.field)       Sort by field
+group_by(.field)      Group by field
+min_by(.f) / max_by   Min/max by field
+[.[] | select(...)]   Filter into new array
+indices("x")          Find positions
+
+## String
+split(",")            Split string
+join(",")             Join array
+test("regex")         Regex match (bool)
+match("regex")        Regex match (object)
+capture("(?<n>...)")  Named captures
+# Regex: double-backslash in jq strings (string + regex escaping)
+# "\\w+" = word  "\\d+" = digit  "\\*\\*" = literal **
+# Tip: --arg skips jq escaping → single backslash:
+#   jq --arg pat '\w+' 'select(.x | test($pat))'
+# "(?i)foo" = case-insensitive
+ltrimstr / rtrimstr   Trim prefix/suffix
+ascii_downcase/upcase Case conversion
+gsub("old";"new")     Global replace
+
+## Reduce & Fold
+reduce .[] as $x (0; . + $x)      Sum
+reduce .[] as $x ({}; . + $x)     Merge objects
+foreach .[] as $x (0; . + $x)     Running total
+
+## Variables & Functions
+.foo as $x | ...      Bind variable
+def fname: body;      Define function
+$ENV.VARNAME          Read env var
+
+## Conditionals
+if .x then .a else .b end
+.x // "default"       Alternative operator (null coalescing)
+(.x > 0) and (.y < 10)
+
+## Output Formats
+-r / --raw-output    Strings without quotes
+-j / --join-output   No newline after each output
+-e / --exit-status   Exit 1 if last output is false/null
+-c / --compact       Compact (no pretty-print)
+-S / --sort-keys     Sort object keys
+
+## Combining
+.a + .b               Add/concat/merge
+.a * .b               Multiply / recursive merge
+input / inputs         Read additional inputs
+--slurp / -s           Read all inputs into array
+--argjson name val     Pass JSON variable
+--arg name val         Pass string variable
+--rawfile name file    Pass file contents as string
+--jsonargs             Treat positional args as JSON

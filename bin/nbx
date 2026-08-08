@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# nbx - Interactive data notebook
+#
+# USAGE:
+#   nbx <notebook.ipynb> [arg...]       Open or create notebook with sources
+#   nbx [arg...]                        Start ephemeral session (no save)
+#
+# A CLI-first notebook for exploring JSON files with jq.
+# Uses .ipynb format (viewable on GitHub/VS Code) but no Jupyter runtime.
+#
+# Each positional arg is a source: an existing file is read as data, anything
+# else is run as a command and its output captured (quote it: nbx 'gh api /x').
+# Command sources snapshot their output into the notebook, so reload never runs
+# shell. A command source stores its command: `refresh` re-runs it. Add more
+# mid-session with `query <command>`. nbx does not read piped input. See ADR
+# nbx/0010.
+#
+# Examples:
+#   $ nbx users.json orders.json        Explore files interactively
+#   $ nbx analysis.ipynb *.json         Save analysis to notebook
+#   $ nbx analysis.ipynb                Resume saved analysis
+#   $ nbx 'gh api /user/repos'          Explore command output
+#
+# REPL commands (type 'help' inside):
+#   query, pick, set, refresh, show, edit, replay, rename, hide, delete, ref, save, reset, quit
+#
+# All $slots are available as jq variables in any expression.
+# Example: set threshold 30, then query .[] | select(.age > $threshold)
+
+SOURCE="$(realpath "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="${SOURCE%/*}"
+REPO_ROOT="${SCRIPT_DIR%/bin}"
+source "$REPO_ROOT/lib/lib-cli.bash" --auto-help "$@"
+
+command -v jq &>/dev/null || { echo "Error: jq is required" >&2; exit 1; }
+cli_require_fzf
+
+LIB_DIR="$REPO_ROOT/lib"
+source "$LIB_DIR/lib-state.bash"
+source "$LIB_DIR/lib-display.bash"
+source "$LIB_DIR/lib-jq.bash"
+source "$LIB_DIR/lib-fzf.bash"
+source "$LIB_DIR/lib-ipynb.bash"
+source "$LIB_DIR/lib-bulk.bash"
+source "$LIB_DIR/lib-deps.bash"
+source "$LIB_DIR/lib-repl.bash"
+
+# Source all command files
+for _cmd_file in "$LIB_DIR"/repl/nbx-cmd-*; do
+  [[ -f "$_cmd_file" ]] && source "$_cmd_file"
+done
+unset _cmd_file
+
+# --- State init ---
+export NBX_DIR
+NBX_DIR="$(mktemp -d)"
+trap 'nbx_on_exit; rm -rf "$NBX_DIR"' EXIT
+nbx_init_state
+
+# Absolutize a path without cd (which forks and can trigger permission prompts):
+# keep absolute paths as-is, resolve relative ones against $PWD.
+nbx_abspath() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *)  printf '%s/%s' "$PWD" "$1" ;;
+  esac
+}
+
+# --- Parse args: each positional is a notebook, a file source, or a command ---
+# A non-.ipynb arg is a file source if it exists, otherwise it's run as a command
+# (ADR 0010). Quote commands so the shell passes them as one arg: nbx 'gh api /x'.
+NBX_NOTEBOOK=""
+NBX_FILES=()
+NBX_CMDS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    *.ipynb)
+      NBX_NOTEBOOK="$(nbx_abspath "$1")" ;;
+    *)
+      if [[ -f "$1" ]]; then
+        NBX_FILES+=("$(nbx_abspath "$1")")
+      else
+        NBX_CMDS+=("$1")
+      fi ;;
+  esac
+  shift
+done
+
+# nbx does not read piped data: a pipe gives no command, so the source could not
+# be refreshed. Point the user at the re-runnable form instead of feeding the
+# bytes to the REPL. Only a real pipe triggers this; `< /dev/null` / `< file`
+# redirects (common in scripts) leave stdin usable for the REPL.
+if [[ -p /dev/stdin ]]; then
+  warn "nbx doesn't read piped input. Pass the command as an argument so it can be refreshed:"
+  warn "  nbx 'your command'"
+  exit 1
+fi
+
+# --- Load or create notebook ---
+# Load first so the notebook's own command sources claim their labels; launch
+# commands are captured afterwards and take the next free cmdN (no collision).
+if [[ -n "$NBX_NOTEBOOK" ]]; then
+  if [[ -f "$NBX_NOTEBOOK" ]]; then
+    if [[ ${#NBX_FILES[@]} -eq 0 ]]; then
+      while IFS= read -r src; do
+        [[ -f "$src" ]] && NBX_FILES+=("$src")
+      done < <(jq -r '.metadata.nbx.sources[]? // empty' "$NBX_NOTEBOOK" 2>/dev/null)
+    fi
+    nbx_ipynb_load "$NBX_NOTEBOOK"
+  else
+    nbx_ipynb_new "$NBX_NOTEBOOK" ${NBX_FILES[@]+"${NBX_FILES[@]}"}
+    info "Created ${NBX_NOTEBOOK##*/}"
+  fi
+fi
+
+# --- Capture command sources (ADR 0010) ---
+# Command args become re-runnable sources recorded in .commands so `save` can
+# persist them and `refresh` can re-run them.
+nbx_capture_command_sources ${NBX_CMDS[@]+"${NBX_CMDS[@]}"}
+
+NBX_DIRTY=false
+
+# --- Banner + REPL ---
+nbx_banner
+
+bind '"\C-l": "\C-a\C-k__nbx_clear__\C-m"' 2>/dev/null
+while true; do
+  nbx_show_notebook
+  echo ""
+  dir_name="${PWD##*/}"
+  nb_label=""
+  [[ -n "$NBX_NOTEBOOK" ]] && nb_label=" $(basename "$NBX_NOTEBOOK" .ipynb)"
+  read -e -p $'  \001\033[2m\002'"$dir_name"$'\001\033[0m\002\001\033[2;36m\002'"$nb_label"$'\001\033[0m\002 \001\033[1m\002nbx›\001\033[0m\002 ' line || {
+    echo ""
+    exit 0
+  }
+  # Ctrl-L: clear screen + redraw banner (loop redraws notebook)
+  if [[ "$line" == "__nbx_clear__" ]]; then
+    clear
+    nbx_banner
+    continue
+  fi
+  [[ -n "$line" ]] && history -s "$line"
+  read -r cmd args <<<"$line"
+  [[ -z "$cmd" ]] && continue
+
+  resolved=$(nbx_resolve_cmd "$cmd") || {
+    plain "Unknown: $cmd (try 'help')" >&2
+    continue
+  }
+  "nbx_cmd_${resolved}" "$args"
+done

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Move a step to a different position
+nbx_cmd_move() {
+  local args="$1"
+  [[ -z "$args" ]] && { plain "Usage: move N up|down|TO" >&2; return 1; }
+  local from="${args%% *}"
+  local target="${args#* }"
+  [[ "$from" == "$target" ]] && { plain "Usage: move N up|down|TO" >&2; return 1; }
+
+  local depth
+  depth=$(nbx_history_depth)
+  nbx_get_history "$from" >/dev/null 2>&1 || { warn "Step $from not found"; return 1; }
+
+  local to
+  case "$target" in
+    up)   to=$((from - 1)) ;;
+    down) to=$((from + 1)) ;;
+    *)    to="$target" ;;
+  esac
+
+  [[ "$to" -lt 1 || "$to" -gt "$depth" ]] && { warn "Can't move: position $to out of range (1-$depth)"; return 1; }
+  [[ "$from" -eq "$to" ]] && return 0
+
+  nbx_move_history "$from" "$to"
+  nbx_mark_dirty
+  local slot
+  slot=$(nbx_history_field "$to" slot)
+  plain "Moved $(slot "$slot") [$from] → [$to]"
+}

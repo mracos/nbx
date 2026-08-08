@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Replay steps to propagate changes through the pipeline
+
+# Re-execute a single step from its history entry (non-interactive).
+nbx_replay_step() {
+  local step_num="$1"
+  local input query slot type
+  input=$(nbx_history_field "$step_num" input)
+  query=$(nbx_history_field "$step_num" query)
+  slot=$(nbx_history_field "$step_num" slot)
+  type=$(nbx_history_field "$step_num" type)
+
+  case "$type" in
+    input)
+      # Input steps hold literal values — already up to date from edit
+      ;;
+    query|pipe|pick)
+      [[ ! -f "$input" ]] && { warn "Step $step_num: source missing"; return 1; }
+      local err_msg
+      err_msg=$(nbx_exec_jq "$query" "$input" "$slot" 2>&1)
+      local rc=$?
+      if [[ $rc -ne 0 ]]; then
+        nbx_mark_failed "$step_num"
+        nbx_save_failed_error "$step_num" "$err_msg"
+        return 1
+      fi
+      ;;
+  esac
+  nbx_clear_stale "$step_num"
+  nbx_clear_failed "$step_num"
+  nbx_clear_failed_error "$step_num"
+}
+
+# Report replay result for a step. Returns 0 on success, 1 on failure.
+_replay_report() {
+  local step="$1" slot="$2"
+  if nbx_replay_step "$step"; then
+    plain "Replayed [$step] → $(slot "$slot") ($(nbx_slot_rows "$slot") rows)"
+    return 0
+  else
+    warn "Failed  [$step] → \$$slot"
+    local err
+    err=$(nbx_failed_error "$step")
+    [[ -n "$err" ]] && warn "  $err"
+    return 1
+  fi
+}
+
+nbx_cmd_replay() {
+  local args="$1"
+
+  if [[ "$args" == "--stale" ]]; then
+    local stale
+    stale=$(nbx_stale_steps)
+    [[ -z "$stale" ]] && { info "Nothing stale"; return 0; }
+    local step ok=0 fail=0
+    while IFS= read -r step; do
+      [[ -z "$step" ]] && continue
+      local slot
+      slot=$(nbx_history_field "$step" slot)
+      if _replay_report "$step" "$slot"; then
+        ((ok++))
+      else
+        ((fail++))
+      fi
+    done <<< "$stale"
+    nbx_mark_dirty
+    plain "Replay: $ok ok, $fail failed"
+    return 0
+
+  elif [[ "$args" == --from\ * ]]; then
+    local start="${args#--from }"
+    nbx_get_history "$start" >/dev/null || { warn "Step $start not found"; return 1; }
+
+    local slot
+    slot=$(nbx_history_field "$start" slot)
+    _replay_report "$start" "$slot"
+
+    # Replay all transitive dependents
+    local deps
+    deps=$(nbx_transitive_dependents "$slot")
+    local step
+    while IFS= read -r step; do
+      [[ -z "$step" ]] && continue
+      local dep_slot
+      dep_slot=$(nbx_history_field "$step" slot)
+      _replay_report "$step" "$dep_slot"
+    done <<< "$deps"
+    nbx_mark_dirty
+    return 0
+
+  elif [[ -n "$args" && "$args" =~ ^[0-9]+$ ]]; then
+    local step_num="$args"
+    nbx_get_history "$step_num" >/dev/null || { warn "Step $step_num not found"; return 1; }
+
+    local slot
+    slot=$(nbx_history_field "$step_num" slot)
+    _replay_report "$step_num" "$slot"
+    nbx_propagate_staleness "$step_num"
+    nbx_mark_dirty
+    nbx_prompt_replay_stale
+    return 0
+
+  elif [[ -z "$args" ]]; then
+    # Default: replay stale steps
+    nbx_cmd_replay "--stale"
+    return $?
+
+  else
+    warn "Usage: replay [N] | replay --stale | replay --from N"
+    return 1
+  fi
+}

@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Display slot contents with fzf-as-pager
+nbx_cmd_show() {
+  local args="$1"
+
+  # -l: compact slot listing (replaces old 'slots' command)
+  if [[ "$args" == "-l" ]]; then
+    local slots
+    slots=$(nbx_list_slots)
+    if [[ -z "$slots" ]]; then
+      info "No slots yet"
+    else
+      while IFS= read -r s; do
+        local rows stype
+        rows=$(nbx_slot_rows "$s")
+        stype=$(nbx_slot_type "$s")
+        plain "$(slot "$s")  $rows rows  $stype"
+        jq -C '.' "$NBX_DIR/slots/${s}.json" | head -5 | sed 's/^/    /'
+        plain ""
+      done <<< "$slots"
+    fi
+    return
+  fi
+
+  # entries: "step_num:slot_name" pairs
+  local entries=()
+
+  if [[ -n "$args" ]]; then
+    for name in $args; do
+      name="${name#\$}"
+      # If it's a number, resolve step number to slot name
+      if [[ "$name" =~ ^[0-9]+$ ]] && [[ -f "$NBX_DIR/history/$name" ]]; then
+        local step_num="$name"
+        name=$(nbx_history_field "$step_num" slot)
+        entries+=("$step_num:$name")
+      elif [[ -f "$NBX_DIR/slots/${name}.json" ]]; then
+        # Find step number for this slot
+        local sn=""
+        for hf in "$NBX_DIR/history"/*; do
+          [[ -f "$hf" ]] || continue
+          if [[ "$(cut -f3 < "$hf")" == "$name" ]]; then
+            sn=$(basename "$hf")
+            break
+          fi
+        done
+        entries+=("${sn:-?}:$name")
+      else
+        warn "Slot not found: $name"
+      fi
+    done
+  else
+    local depth
+    depth=$(nbx_history_depth)
+    for ((si = 1; si <= depth; si++)); do
+      nbx_is_hidden "$si" && continue
+      step_slot=$(nbx_history_field "$si" slot)
+      [[ -f "$NBX_DIR/slots/${step_slot}.json" ]] && entries+=("$si:$step_slot")
+    done
+    [[ ${#entries[@]} -eq 0 ]] && { warn "No visible slots"; return 1; }
+  fi
+
+  [[ ${#entries[@]} -eq 0 ]] && return 1
+
+  local step slot_name signal
+  if [[ ${#entries[@]} -eq 1 ]]; then
+    local e="${entries[0]}"
+    step="${e%%:*}" slot_name="${e#*:}"
+  else
+    local picked
+    picked=$(nbx_fzf_show_multi "${entries[@]}") || { stty sane 2>/dev/null; return 0; }
+    step="${picked%%:*}" slot_name="${picked#*:}"
+  fi
+
+  signal=$(nbx_fzf_show_slot "$step" "$slot_name")
+  stty sane 2>/dev/null
+  case "$signal" in
+    PIN)
+      nbx_pin "$slot_name"
+      plain "Pinned $(slot "$slot_name") [$step]"
+      ;;
+    EDIT)
+      [[ "$step" == "?" ]] && { warn "Cannot edit: unknown step number"; return 1; }
+      nbx_cmd_edit "$step"
+      ;;
+  esac
+}

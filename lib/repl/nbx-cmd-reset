@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Clear all slots and history
+nbx_cmd_reset() {
+  nbx_reset
+  nbx_mark_dirty
+  info "Notebook cleared"
+}

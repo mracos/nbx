@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Pin a slot for persistent visibility below the notebook table
+nbx_cmd_pin() {
+  local args="$1"
+
+  # unpin
+  if [[ "$args" == "off" || "$args" == "none" ]]; then
+    nbx_unpin
+    plain "Unpinned"
+    return 0
+  fi
+
+  local slot_name
+
+  if [[ -n "$args" ]]; then
+    args="${args#\$}"
+    # Step number → slot name
+    if [[ "$args" =~ ^[0-9]+$ ]] && [[ -f "$NBX_DIR/history/$args" ]]; then
+      slot_name=$(nbx_history_field "$args" slot)
+    elif [[ -f "$NBX_DIR/slots/${args}.json" ]]; then
+      slot_name="$args"
+    else
+      warn "Slot not found: $args"
+      return 1
+    fi
+  else
+    # No args: pin last step's slot
+    local depth
+    depth=$(nbx_history_depth)
+    [[ "$depth" -eq 0 ]] && { warn "No slots to pin"; return 1; }
+    slot_name=$(nbx_history_field "$depth" slot)
+  fi
+
+  nbx_pin "$slot_name"
+  local step
+  step=$(nbx_slot_to_step "$slot_name" 2>/dev/null || echo "?")
+  plain "Pinned $(slot "$slot_name") [$step]"
+}

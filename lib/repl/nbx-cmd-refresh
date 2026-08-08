@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Re-run a command source and re-capture its output (ADR 0010, option 2)
+nbx_cmd_refresh() {
+  local args="$1"
+
+  # Target labels: an explicit source (cmd1 / $cmd1) or all -c sources.
+  local labels=()
+  if [[ -n "$args" ]]; then
+    local label="${args%% *}"
+    label="${label#\$}"
+    labels=("$label")
+  else
+    local l
+    while IFS=$'\t' read -r l _; do
+      [[ -n "$l" ]] && labels+=("$l")
+    done < <(nbx_source_cmd_list)
+    [[ ${#labels[@]} -eq 0 ]] && { warn "No command sources to refresh"; return 1; }
+  fi
+
+  local refreshed=0 label cmd
+  for label in "${labels[@]}"; do
+    cmd=$(nbx_source_cmd_get "$label")
+    if [[ -z "$cmd" ]]; then
+      warn "$label is not a command source (nothing to re-run)"
+      continue
+    fi
+    local src="$NBX_DIR/sources/$label" tmp="$NBX_DIR/sources/.${label}.new"
+    info "Running: $cmd"
+    if eval "$cmd" > "$tmp" 2>/dev/null && [[ -s "$tmp" ]]; then
+      nbx_wrap_if_not_json "$tmp" "$label"
+      mv "$tmp" "$src"
+      # Steps reading this source (and their dependents) are now stale.
+      local depth i
+      depth=$(nbx_history_depth)
+      for ((i = 1; i <= depth; i++)); do
+        [[ "$(nbx_history_field "$i" input)" == "$src" ]] || continue
+        nbx_mark_stale "$i"
+        nbx_propagate_staleness "$i"
+      done
+      refreshed=$((refreshed + 1))
+      plain "$(bold "$label") refreshed"
+    else
+      warn "$label: command produced no output, keeping previous snapshot"
+      rm -f "$tmp"
+    fi
+  done
+
+  [[ $refreshed -eq 0 ]] && return 1
+  nbx_mark_dirty
+  nbx_prompt_replay_stale
+}

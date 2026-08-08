@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Run a jq query on a source file, slot, or command
+nbx_cmd_query() {
+  local args="$1"
+  local input_file
+  if [[ -z "$args" ]]; then
+    input_file=$(nbx_pick_input) || return 1
+  else
+    input_file=$(nbx_resolve_input "$args")
+    if [[ ! -f "$input_file" ]]; then
+      # A $slot or step-number ref that doesn't resolve is a genuine "not found".
+      # Anything else is treated as a command: capture it as a source, then query
+      # it, then query it: `source` + `query` in one step (ADR 0010).
+      if [[ "$args" == \$* || "$args" =~ ^[0-9]+$ ]]; then
+        warn "Not found: $args"
+        return 1
+      fi
+      info "Running: $args"
+      NBX_LAST_SOURCE_LABEL=""
+      nbx_capture_one_command "$args" || return 1
+      input_file="$NBX_DIR/sources/$NBX_LAST_SOURCE_LABEL"
+      nbx_mark_dirty
+    fi
+  fi
+  local raw_query
+  raw_query=$(nbx_fzf_query "$input_file") || return 1
+  local hide=false query="$raw_query"
+  if [[ "$raw_query" == HIDE:* ]]; then
+    hide=true
+    query="${raw_query#HIDE:}"
+  fi
+  local slot_name
+  slot_name=$(nbx_prompt_slot_name) || { warn "Cancelled"; return 1; }
+  if ! nbx_exec_jq "$query" "$input_file" "$slot_name"; then
+    return 1
+  fi
+  nbx_push_history "$input_file" "$query" "$slot_name" "query"
+  $hide && nbx_toggle_hidden "$(nbx_history_depth)" >/dev/null
+  nbx_mark_dirty
+  result "$slot_name" "$(nbx_slot_rows "$slot_name") rows"
+}

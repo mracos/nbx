@@ -1,0 +1,185 @@
+#!/usr/bin/env bats
+# bats file_tags=unit
+
+setup() {
+  load "$PROJECT_ROOT/test/test_helper"
+  load test_helper
+}
+
+teardown() {
+  rm -rf "$NBX_DIR"
+}
+
+# --- Slot name prompt ---
+
+@test "nbx_prompt_slot_name returns default on empty input" {
+  run bash -c '
+    NBX_DIR=$(mktemp -d)
+    mkdir -p "$NBX_DIR/history"
+    source "'"$PROJECT_ROOT"'/lib/lib-state.bash"
+    source "'"$PROJECT_ROOT"'/lib/lib-repl.bash"
+    nbx_init_state
+    nbx_prompt_slot_name <<< ""
+  '
+  assert_success
+  assert_output --partial "s1"
+}
+
+@test "nbx_prompt_slot_name cancels on ESC" {
+  run bash -c '
+    NBX_DIR=$(mktemp -d)
+    mkdir -p "$NBX_DIR/history"
+    source "'"$PROJECT_ROOT"'/lib/lib-state.bash"
+    source "'"$PROJECT_ROOT"'/lib/lib-repl.bash"
+    nbx_init_state
+    printf "\033" | nbx_prompt_slot_name
+  '
+  assert_failure
+}
+
+@test "nbx_prompt_slot_name confirms before overwriting existing slot" {
+  run bash -c '
+    NBX_DIR=$(mktemp -d)
+    mkdir -p "$NBX_DIR/history" "$NBX_DIR/slots"
+    source "'"$PROJECT_ROOT"'/lib/lib-state.bash"
+    source "'"$PROJECT_ROOT"'/lib/lib-display.bash"
+    source "'"$PROJECT_ROOT"'/lib/lib-repl.bash"
+    nbx_init_state
+    echo "existing" > "$NBX_DIR/slots/s1.json"
+    printf "s1\nn\n" | nbx_prompt_slot_name
+  '
+  assert_failure
+}
+
+@test "nbx_prompt_slot_name allows overwrite on y" {
+  run bash -c '
+    NBX_DIR=$(mktemp -d)
+    mkdir -p "$NBX_DIR/history" "$NBX_DIR/slots"
+    source "'"$PROJECT_ROOT"'/lib/lib-state.bash"
+    source "'"$PROJECT_ROOT"'/lib/lib-display.bash"
+    source "'"$PROJECT_ROOT"'/lib/lib-repl.bash"
+    nbx_init_state
+    echo "existing" > "$NBX_DIR/slots/s1.json"
+    printf "s1\ny\n" | nbx_prompt_slot_name
+  '
+  assert_success
+  assert_output --partial "s1"
+}
+
+# --- Command resolution ---
+
+@test "nbx_resolve_cmd matches exact command" {
+  run nbx_resolve_cmd "query"
+  assert_success
+  assert_output "query"
+}
+
+@test "nbx_resolve_cmd matches prefix" {
+  run nbx_resolve_cmd "que"
+  assert_success
+  assert_output "query"
+}
+
+@test "nbx_resolve_cmd fails on ambiguous prefix" {
+  run nbx_resolve_cmd "s"
+  assert_failure
+  assert_output --partial "Ambiguous"
+}
+
+@test "nbx_resolve_cmd fails on unknown command" {
+  run nbx_resolve_cmd "zzz"
+  assert_failure
+}
+
+@test "nbx_resolve_cmd exact match wins over a longer prefix" {
+  run nbx_resolve_cmd "ref"
+  assert_success
+  assert_output "ref"
+}
+
+# --- Command sources (ADR 0010) ---
+
+@test "nbx_capture_command_sources captures stdout into a numbered source" {
+  NBX_FILES=()
+  nbx_capture_command_sources "echo [1,2,3]"
+
+  assert [ -f "$NBX_DIR/sources/cmd1" ]
+  run jq -c '.' "$NBX_DIR/sources/cmd1"
+  assert_output "[1,2,3]"
+  run nbx_source_cmd_get "cmd1"
+  assert_output "echo [1,2,3]"
+}
+
+@test "nbx_capture_command_sources registers the source in NBX_FILES" {
+  NBX_FILES=()
+  nbx_capture_command_sources "echo [1]"
+  printf '%s\n' "${NBX_FILES[@]}" > "$NBX_DIR/_files.txt"
+  run grep -c 'sources/cmd1' "$NBX_DIR/_files.txt"
+  assert_output "1"
+}
+
+@test "nbx_capture_command_sources numbers multiple commands" {
+  NBX_FILES=()
+  nbx_capture_command_sources "echo [1]" "echo [2]"
+  assert [ -f "$NBX_DIR/sources/cmd1" ]
+  assert [ -f "$NBX_DIR/sources/cmd2" ]
+  run nbx_source_cmd_get "cmd2"
+  assert_output "echo [2]"
+}
+
+@test "nbx_capture_one_command dedups an identical command to the same source" {
+  NBX_FILES=()
+  nbx_capture_one_command "echo [1]"
+  local first="$NBX_LAST_SOURCE_LABEL"
+
+  nbx_capture_one_command "echo [1]"
+  local second="$NBX_LAST_SOURCE_LABEL"
+
+  assert_equal "$first" "$second"           # reused, not a new label
+  assert [ ! -e "$NBX_DIR/sources/cmd2" ]   # no cmd2 created
+  # Registered once in NBX_FILES, not twice.
+  printf '%s\n' "${NBX_FILES[@]}" > "$NBX_DIR/_files.txt"
+  run grep -c 'sources/cmd1' "$NBX_DIR/_files.txt"
+  assert_output "1"
+}
+
+@test "nbx_capture_one_command still numbers a different command" {
+  NBX_FILES=()
+  nbx_capture_one_command "echo [1]"
+  nbx_capture_one_command "echo [2]"
+  assert [ -e "$NBX_DIR/sources/cmd1" ]
+  assert [ -e "$NBX_DIR/sources/cmd2" ]
+}
+
+@test "nbx_capture_command_sources warns and skips a command with no output" {
+  NBX_FILES=()
+  run nbx_capture_command_sources "true"
+  assert_output --partial "produced no output"
+  assert [ ! -f "$NBX_DIR/sources/cmd1" ]
+}
+
+@test "nbx_capture_command_sources wraps non-JSON output into a string array" {
+  NBX_FILES=()
+  run nbx_capture_command_sources $'printf "alpha\\nbeta\\n"'
+  assert_output --partial "wrapped non-JSON output"
+
+  # The captured source is now queryable JSON, not raw text.
+  run jq -c '.' "$NBX_DIR/sources/cmd1"
+  assert_output '["alpha","beta"]'
+}
+
+@test "nbx_wrap_if_not_json leaves valid JSON untouched" {
+  mkdir -p "$NBX_DIR/sources"
+  echo '[1,2,3]' > "$NBX_DIR/sources/cmd1"
+  run nbx_wrap_if_not_json "$NBX_DIR/sources/cmd1" "cmd1"
+  refute_output --partial "wrapped"
+  run jq -c '.' "$NBX_DIR/sources/cmd1"
+  assert_output '[1,2,3]'
+}
+
+@test "nbx_capture_command_sources is a no-op with no commands" {
+  NBX_FILES=()
+  run nbx_capture_command_sources
+  assert_success
+  assert [ ! -d "$NBX_DIR/sources" ]
+}

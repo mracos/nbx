@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Save notebook to .ipynb
+nbx_cmd_save() {
+  local args="$1"
+  if [[ -n "$args" ]]; then
+    local nb_name="$args"
+    [[ "$nb_name" != *.ipynb ]] && nb_name="${nb_name}.ipynb"
+    NBX_NOTEBOOK="$(pwd)/$nb_name"
+  elif [[ -z "$NBX_NOTEBOOK" ]]; then
+    printf '  %s ' "$(dim "Save as:")"
+    local nb_name
+    read -e -r nb_name
+    [[ -z "$nb_name" ]] && { warn "Cancelled"; return 1; }
+    [[ "$nb_name" != *.ipynb ]] && nb_name="${nb_name}.ipynb"
+    NBX_NOTEBOOK="$(pwd)/$nb_name"
+  fi
+  nbx_ipynb_save "$NBX_NOTEBOOK"
+  NBX_DIRTY=false
+  info "Saved to $(basename "$NBX_NOTEBOOK")"
+}

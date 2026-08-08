@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Undo the last edit on a step
+nbx_cmd_undo() {
+  local step_num="$1"
+
+  if [[ -z "$step_num" ]]; then
+    # Find the most recent backup
+    local latest=""
+    for d in "$NBX_DIR/backups"/*/; do
+      [[ -d "$d" ]] || continue
+      local n
+      n=$(basename "$d")
+      if [[ -z "$latest" || "$n" -gt "$latest" ]]; then
+        latest="$n"
+      fi
+    done
+    if [[ -z "$latest" ]]; then
+      info "No edits to undo"
+      return 0
+    fi
+    step_num="$latest"
+  fi
+
+  nbx_has_backup "$step_num" || { warn "No backup for step $step_num"; return 1; }
+
+  local slot
+  slot=$(nbx_history_field "$step_num" slot)
+  nbx_restore_step "$step_num"
+
+  # Clear staleness that the edit created on dependents
+  nbx_propagate_staleness "$step_num"
+  nbx_clear_stale "$step_num"
+  # Re-propagate from the restored state (dependents may still be stale
+  # if restored value differs from what they were computed against)
+  nbx_propagate_staleness "$step_num"
+
+  nbx_mark_dirty
+  plain "Restored [$step_num] → $(slot "$slot")"
+  nbx_prompt_replay_stale
+}

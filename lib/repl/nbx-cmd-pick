@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Select specific rows from results with fzf
+nbx_cmd_pick() {
+  local args="$1"
+  local input_file
+  if [[ -n "$args" ]]; then
+    input_file=$(nbx_resolve_input "$args")
+  else
+    local depth
+    depth=$(nbx_history_depth)
+    [[ "$depth" -eq 0 ]] && { warn "No results to pick from yet"; return 1; }
+    input_file="$NBX_DIR/slots/$(nbx_history_field "$depth" slot).json"
+  fi
+  [[ ! -f "$input_file" ]] && { warn "Not found: $args"; return 1; }
+  local selected
+  selected=$(nbx_fzf_pick "$input_file") || return 1
+
+  # Build filter and data from index-prefixed lines
+  local filter data count
+  filter=$(echo "$selected" | _nbx_pick_indices_to_filter)
+  count=$(echo "$selected" | wc -l | tr -d ' ')
+  if [[ "$count" -eq 1 ]]; then
+    data=$(echo "$selected" | sed 's/^[0-9]*://')
+  else
+    data=$(echo "$selected" | sed 's/^[0-9]*://' | jq -s '.')
+  fi
+
+  local slot_name
+  slot_name=$(nbx_prompt_slot_name) || { warn "Cancelled"; return 1; }
+  echo "$data" | nbx_save_slot "$slot_name"
+  nbx_push_history "$input_file" "$filter" "$slot_name" "pick"
+  nbx_mark_dirty
+  if [[ "$count" -eq 1 ]]; then
+    result "$slot_name" "= $(head -c 60 "$NBX_DIR/slots/${slot_name}.json")"
+  else
+    result "$slot_name" "$count selected"
+  fi
+}

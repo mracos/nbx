@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Create a slot from a literal value
+nbx_cmd_set() {
+  local args="$1"
+  if [[ -z "$args" ]]; then
+    plain "Usage: set name value" >&2
+    plain "Examples: set threshold 30" >&2
+    plain "         set ids '[1,2,3]'" >&2
+    return 1
+  fi
+  local set_name="${args%% *}"
+  local set_value="${args#* }"
+  [[ "$set_name" == "$set_value" ]] && { plain "Usage: set name value" >&2; return 1; }
+  if echo "$set_value" | jq '.' &>/dev/null; then
+    echo "$set_value" | jq '.' | nbx_save_slot "$set_name"
+  else
+    jq -n --arg v "$set_value" '$v' | nbx_save_slot "$set_name"
+  fi
+  nbx_push_history "input" "$set_value" "$set_name" "input"
+  nbx_mark_dirty
+  result "$set_name" "= $(head -c 60 "$NBX_DIR/slots/${set_name}.json")"
+}
