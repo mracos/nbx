@@ -232,7 +232,7 @@ nbx_move_history() {
 nbx_history_depth() {
   local count=0
   for f in "$NBX_DIR/history"/*; do
-    [[ -f "$f" ]] && ((count++))
+    [[ -f "$f" ]] && count=$((count + 1))
   done
   echo "$count"
 }

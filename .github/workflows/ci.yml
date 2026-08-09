@@ -10,8 +10,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - name: Install deps (jq, fzf)
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update && sudo apt-get install -y jq fzf; else brew install jq fzf; fi
+      - name: Install deps
+        run: if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update && sudo apt-get install -y jq fzf; else brew install jq fzf; fi
       - run: npm ci || npm install
-      - run: PROJECT_ROOT=$PWD npx bats -r test
+      - run: npm test

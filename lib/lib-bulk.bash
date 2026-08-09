@@ -38,7 +38,7 @@ nbx_bulk_replay() {
     # Last " -> $..." is the slot, first part is source, middle is filter
     if [[ "$bulk_line" != *" -> \$"* ]]; then
       warn "Can't parse: $bulk_line"
-      ((bulk_fail++))
+      bulk_fail=$((bulk_fail + 1))
       continue
     fi
     local bulk_slot="${bulk_line##* -> \$}"
@@ -47,7 +47,7 @@ nbx_bulk_replay() {
     # Split remaining "source -> filter" on first " -> "
     if [[ "$bulk_line" != *" -> "* ]]; then
       warn "Can't parse (missing source -> filter): $bulk_line"
-      ((bulk_fail++))
+      bulk_fail=$((bulk_fail + 1))
       continue
     fi
     local bulk_source="${bulk_line%% -> *}"
@@ -65,7 +65,7 @@ nbx_bulk_replay() {
       fi
       nbx_push_history "input" "$bulk_filter" "${bulk_slot#\$}" "input"
       result "$bulk_slot" "set"
-      ((bulk_ok++))
+      bulk_ok=$((bulk_ok + 1))
       continue
     fi
 
@@ -79,7 +79,7 @@ nbx_bulk_replay() {
 
     if [[ -z "$bulk_input" || ! -f "$bulk_input" ]]; then
       warn "Source not found: $bulk_source"
-      ((bulk_fail++))
+      bulk_fail=$((bulk_fail + 1))
       continue
     fi
 
@@ -90,11 +90,11 @@ nbx_bulk_replay() {
     if [[ $bulk_rc -eq 0 ]]; then
       nbx_push_history "$bulk_input" "$bulk_filter" "${bulk_slot#\$}" "query"
       result "$bulk_slot" "$(nbx_slot_rows "${bulk_slot#\$}") rows"
-      ((bulk_ok++))
+      bulk_ok=$((bulk_ok + 1))
     else
       warn "Filter failed: $bulk_filter"
       [[ -n "$bulk_err" ]] && warn "  $bulk_err"
-      ((bulk_fail++))
+      bulk_fail=$((bulk_fail + 1))
     fi
   done
 

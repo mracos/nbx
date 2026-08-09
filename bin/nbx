@@ -124,6 +124,14 @@ NBX_DIRTY=false
 # --- Banner + REPL ---
 nbx_banner
 
+# Fresh launch with sources: jump straight into the query view (cancel drops to
+# the REPL). Skipped when resuming a notebook with steps or when there's nothing
+# to query. See nbx_startup_query_target.
+if _startup_target=$(nbx_startup_query_target); then
+  nbx_cmd_query "$_startup_target" || true
+fi
+unset _startup_target
+
 bind '"\C-l": "\C-a\C-k__nbx_clear__\C-m"' 2>/dev/null
 while true; do
   nbx_show_notebook

@@ -23,7 +23,7 @@ nbx_cmd_query() {
     fi
   fi
   local raw_query
-  raw_query=$(nbx_fzf_query "$input_file") || return 1
+  raw_query=$(nbx_fzf_query "$input_file" "." "$(nbx_input_label "$input_file")") || return 1
   local hide=false query="$raw_query"
   if [[ "$raw_query" == HIDE:* ]]; then
     hide=true

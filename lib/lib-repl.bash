@@ -47,10 +47,13 @@ nbx_prompt_replay_stale() {
   local answer
   read -r answer <&0 2>/dev/null || answer="y"
   if [[ "${answer:-y}" != [nN]* ]]; then
-    nbx_cmd_replay "--stale"
+    # Best-effort: a downstream step that now errors is reported by replay and
+    # left marked failed; it must not abort the edit/undo that triggered this.
+    nbx_cmd_replay "--stale" || true
   else
     info "Run 'replay' when ready"
   fi
+  return 0
 }
 
 # --- Command sources (ADR 0010) ---
@@ -214,6 +217,31 @@ nbx_next_slot() {
   echo "s$(($(nbx_history_depth) + 1))"
 }
 
+# Slots are exposed as jq variables ($name), which must match
+# [a-zA-Z_][a-zA-Z0-9_]*. Fold anything else (spaces, punctuation) to '_' so the
+# slot stays referenceable instead of producing an unusable "$my slot". Returns
+# empty when nothing usable remains, so the caller can fall back to the default.
+nbx_sanitize_slot_name() {
+  local name="$1"
+  name="${name//[^a-zA-Z0-9_]/_}"                            # invalid chars -> _
+  while [[ "$name" == *__* ]]; do name="${name//__/_}"; done # collapse runs
+  name="${name#_}"; name="${name%_}"                         # trim edge separators
+  [[ "$name" =~ ^[0-9] ]] && name="_$name"                   # can't start with a digit
+  printf '%s' "$name"
+}
+
+# Sanitize a user-supplied slot name for jq, announcing any change on stderr.
+# Prints the jq-safe name; returns 1 (with a warning) when nothing usable remains.
+# For the arg-based commands (set/rename/dup); the interactive prompt has its own
+# default fallback below.
+nbx_coerce_slot_name() {
+  local raw="$1" safe
+  safe=$(nbx_sanitize_slot_name "$raw")
+  [[ -z "$safe" ]] && { warn "Invalid slot name: $raw"; return 1; }
+  [[ "$safe" != "$raw" ]] && printf '  %s\n' "$(dim "→ named \$$safe (jq-safe)")" >&2
+  printf '%s' "$safe"
+}
+
 nbx_prompt_slot_name() {
   local default
   default=$(nbx_next_slot)
@@ -227,6 +255,10 @@ nbx_prompt_slot_name() {
   fi
   name="${name:-$default}"
   name="${name#\$}"
+  local raw="$name"
+  name=$(nbx_sanitize_slot_name "$name")
+  [[ -z "$name" ]] && name="$default"
+  [[ "$name" != "$raw" ]] && printf '  %s\n' "$(dim "→ named \$$name (jq-safe)")" >&2
   if [[ -f "$NBX_DIR/slots/${name}.json" ]]; then
     printf '  %s ' "$(warn "\$$name exists — overwrite? [y/N]")" >&2
     local confirm
@@ -257,6 +289,34 @@ nbx_banner() {
     echo ""
   fi
   info "Type help for commands, ref for jq cheatsheet"
+}
+
+# --- Input display ---
+
+# Human-friendly name for a resolved input path, used as the query-view hint so
+# it's clear which source a filter runs against. Slots read as $name, command
+# sources show their label (cmdN), everything else is the file's basename.
+nbx_input_label() {
+  local input_file="$1"
+  case "$input_file" in
+    "$NBX_DIR/slots/"*) printf '$%s' "$(basename "$input_file" .json)" ;;
+    *)                  printf '%s' "${input_file##*/}" ;;
+  esac
+}
+
+# --- Startup ---
+
+# Decide the launch-time query target. The common first move after `nbx <file>`
+# is to query that file, so open the query view straight away instead of dropping
+# at the REPL. Prints the source arg for nbx_cmd_query (empty = show the picker;
+# a basename when there's a single source, so the picker is skipped) and returns 0
+# to auto-open. Returns 1 to stay at the REPL: no sources, or resuming a notebook
+# that already has steps (history depth > 0) where the notebook view matters more.
+nbx_startup_query_target() {
+  [[ "$(nbx_history_depth)" -eq 0 ]] || return 1
+  [[ ${#NBX_FILES[@]} -gt 0 ]] || return 1
+  [[ ${#NBX_FILES[@]} -eq 1 ]] && printf '%s' "${NBX_FILES[0]##*/}"
+  return 0
 }
 
 # --- Command dispatch ---

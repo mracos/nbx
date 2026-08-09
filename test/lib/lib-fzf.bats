@@ -199,6 +199,46 @@ PREVIEW_EOF
   assert_success
 }
 
+# --- Tab completion binding ---
+
+@test "tab binding delegates to a script, not an inline case" {
+  # fzf's transform(...) parser matches on balanced parens; an inline case
+  # (with '[S'*) / *) patterns) closes the action early and fzf errors with
+  # "unknown action: refresh-preview...". The logic must live in a helper script.
+  run bash -c '
+    source "'"$PROJECT_ROOT"'/lib/lib-fzf.bash"
+    declare -f nbx_fzf_query
+  '
+  assert_success
+  assert_output --partial 'tab:transform(bash '"'"'$tab_script'"'"' {})'
+  refute_output --partial 'tab:transform(case'
+}
+
+@test "tab helper completes a stash line into a change-query action" {
+  local tab_script="$NBX_DIR/.tab.sh"
+  cat > "$tab_script" <<'TAB_EOF'
+#!/usr/bin/env bash
+line="$1"
+case "$line" in
+  '[S'*)
+    q=$(printf '%s' "$line" | sed 's/^\[S[0-9]*\] //; s/  [0-9].*//')
+    echo "change-query($q)+refresh-preview"
+    ;;
+  *)
+    echo "replace-query"
+    ;;
+esac
+TAB_EOF
+
+  run bash "$tab_script" '[S1] .items[] | .name  42 array'
+  assert_success
+  assert_output 'change-query(.items[] | .name)+refresh-preview'
+
+  run bash "$tab_script" '.foo.bar'
+  assert_success
+  assert_output 'replace-query'
+}
+
 # --- Pick index filter ---
 
 @test "_nbx_pick_indices_to_filter single selection produces unwrapped index" {

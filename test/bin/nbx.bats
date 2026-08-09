@@ -29,15 +29,33 @@ _nbx_env() {
   assert_output --partial "USAGE"
 }
 
+# Build an isolated PATH that mirrors the real one minus one tool, so nbx's
+# `command -v` check for that tool fails regardless of where it lives (jq/fzf
+# sit in /usr/bin on Linux CI but in homebrew on macOS, so dropping a single
+# hard-coded dir isn't portable). `</dev/null` keeps stdin off a pipe so the
+# piped-input guard doesn't fire before the dependency check.
+_path_without() {
+  local drop="$1" stub="$BATS_TEST_TMPDIR/stub-no-$drop" d f
+  mkdir -p "$stub"
+  while IFS= read -r -d: d; do
+    [[ -d "$d" ]] || continue
+    for f in "$d"/*; do
+      [[ -x "$f" && "${f##*/}" != "$drop" && ! -e "$stub/${f##*/}" ]] && ln -s "$f" "$stub/${f##*/}"
+    done
+  done <<<"$PATH:"
+  printf '%s' "$stub"
+}
+
 @test "nbx requires jq" {
-  PATH="/usr/bin" run -127 "$NBX_CLI"
+  PATH="$(_path_without jq)" run "$NBX_CLI" </dev/null
   assert_failure
+  assert_output --partial "jq is required"
 }
 
 @test "nbx requires fzf" {
-  # Remove fzf from PATH but keep jq
-  PATH="$(dirname "$(command -v jq)")" run -127 "$NBX_CLI"
+  PATH="$(_path_without fzf)" run "$NBX_CLI" </dev/null
   assert_failure
+  assert_output --partial "fzf is required"
 }
 
 @test "nbx cheatsheet file exists and has content" {

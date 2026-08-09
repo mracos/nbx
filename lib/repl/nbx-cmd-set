@@ -11,6 +11,8 @@ nbx_cmd_set() {
   local set_name="${args%% *}"
   local set_value="${args#* }"
   [[ "$set_name" == "$set_value" ]] && { plain "Usage: set name value" >&2; return 1; }
+  set_name="${set_name#\$}"
+  set_name=$(nbx_coerce_slot_name "$set_name") || return 1
   if echo "$set_value" | jq '.' &>/dev/null; then
     echo "$set_value" | jq '.' | nbx_save_slot "$set_name"
   else

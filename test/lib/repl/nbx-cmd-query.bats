@@ -119,3 +119,116 @@ teardown() {
   run nbx_history_depth
   assert_output "0"
 }
+
+# --- Slot name sanitizing (nbx_sanitize_slot_name) ---
+
+@test "slot name with spaces folds to underscores" {
+  run nbx_sanitize_slot_name "bigger name payees"
+  assert_output "bigger_name_payees"
+}
+
+@test "slot name strips punctuation and collapses/trims separators" {
+  run nbx_sanitize_slot_name "  a/b--c!!  "
+  assert_output "a_b_c"
+}
+
+@test "slot name starting with a digit gets an underscore prefix" {
+  run nbx_sanitize_slot_name "3rd try"
+  assert_output "_3rd_try"
+}
+
+@test "already-valid slot name is unchanged" {
+  run nbx_sanitize_slot_name "s1"
+  assert_output "s1"
+}
+
+@test "slot name with no usable characters sanitizes to empty" {
+  run nbx_sanitize_slot_name "!!!"
+  assert_output ""
+}
+
+@test "a space-named slot stays usable as a jq variable" {
+  local data_file="$NBX_DIR/data.json"
+  echo '[10,20,30]' > "$data_file"
+
+  nbx_fzf_query() { echo "."; }
+  nbx_prompt_slot_name() { echo "$(nbx_sanitize_slot_name "bigger name payees")"; }
+  nbx_cmd_query "$data_file"
+
+  # The slot file uses the safe name...
+  assert [ -f "$NBX_DIR/slots/bigger_name_payees.json" ]
+  # ...and it resolves as a jq variable in a later query (spaces would make jq
+  # reject the --slurpfile identifier).
+  nbx_build_slot_args
+  run jq "${NBX_JQ_ARGS[@]}" -n "${NBX_JQ_UNWRAP}"'$bigger_name_payees | add'
+  assert_output "60"
+}
+
+# --- Input display hint (nbx_input_label) ---
+
+@test "input label is the basename for a file source" {
+  run nbx_input_label "$NBX_DIR/sources/cmd1"
+  assert_output "cmd1"
+
+  run nbx_input_label "/some/dir/2025-03-07-personal.json"
+  assert_output "2025-03-07-personal.json"
+}
+
+@test "input label reads a slot as \$name" {
+  run nbx_input_label "$NBX_DIR/slots/threshold.json"
+  assert_output '$threshold'
+}
+
+@test "query passes the input label to the fzf hint" {
+  local data_file="$NBX_DIR/2025-03-07-personal.json"
+  echo '[1,2,3]' > "$data_file"
+
+  # Capture the 3rd arg (context_label) fzf is called with, still return a query.
+  nbx_fzf_query() { printf '%s' "$3" > "$NBX_DIR/.seen_label"; echo "."; }
+  nbx_prompt_slot_name() { echo "s1"; }
+
+  nbx_cmd_query "$data_file"
+
+  run cat "$NBX_DIR/.seen_label"
+  assert_output "2025-03-07-personal.json"
+}
+
+# --- Startup auto-query (nbx_startup_query_target) ---
+
+@test "startup auto-opens query on a single source, passing its basename" {
+  NBX_FILES=("$NBX_DIR/2025-03-07-personal.json")
+
+  run nbx_startup_query_target
+  assert_success
+  assert_output "2025-03-07-personal.json"
+}
+
+@test "startup auto-opens with the picker (empty arg) for multiple sources" {
+  NBX_FILES=("$NBX_DIR/a.json" "$NBX_DIR/b.json")
+
+  run nbx_startup_query_target
+  assert_success
+  assert_output ""
+}
+
+@test "startup stays at the REPL when there are no sources" {
+  NBX_FILES=()
+
+  run nbx_startup_query_target
+  assert_failure
+}
+
+@test "startup stays at the REPL when resuming a notebook with steps" {
+  local data_file="$NBX_DIR/data.json"
+  echo '[1,2,3]' > "$data_file"
+  MOCK_QUERY='.'
+  MOCK_SLOT='s1'
+  nbx_cmd_query "$data_file"
+  NBX_FILES=("$data_file")
+
+  run nbx_history_depth
+  assert_output "1"
+
+  run nbx_startup_query_target
+  assert_failure
+}

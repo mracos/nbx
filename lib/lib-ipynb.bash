@@ -142,19 +142,26 @@ nbx_ipynb_save() {
     rm -f "$entries"
   fi
 
-  # Assemble notebook: slurp all cell files, no argv limits
+  # Assemble notebook. Pass sources/command_sources via --slurpfile (reads
+  # JSON from a file) rather than --argjson (which puts the whole blob on argv
+  # and blows ARG_MAX once a snapshotted output is large). --slurpfile wraps
+  # the file's value in an array, hence $sources[0].
   local tmp_notebook="$NBX_DIR/.save_tmp.ipynb"
+  local sources_file="$NBX_DIR/.save_sources.json"
+  local cmdsrc_file="$NBX_DIR/.save_cmdsrc.json"
+  printf '%s' "$sources_json" > "$sources_file"
+  printf '%s' "$command_sources_json" > "$cmdsrc_file"
   jq -s \
-    --argjson sources "$sources_json" \
-    --argjson command_sources "$command_sources_json" \
+    --slurpfile sources "$sources_file" \
+    --slurpfile command_sources "$cmdsrc_file" \
     '{
       nbformat: 4,
       nbformat_minor: 5,
       metadata: {
         nbx: {
           version: "0.1",
-          sources: $sources,
-          command_sources: $command_sources,
+          sources: $sources[0],
+          command_sources: $command_sources[0],
           saved: (now | strftime("%Y-%m-%dT%H:%M:%S"))
         },
         kernelspec: {
@@ -164,6 +171,7 @@ nbx_ipynb_save() {
       },
       cells: .
     }' "$cells_dir"/*.json > "$tmp_notebook"
+  rm -f "$sources_file" "$cmdsrc_file"
 
   # Atomic write: only replace notebook if save succeeded
   if [[ -s "$tmp_notebook" ]] && jq '.' "$tmp_notebook" &>/dev/null; then

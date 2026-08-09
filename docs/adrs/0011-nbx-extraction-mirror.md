@@ -37,7 +37,7 @@ zinit installs zsh plugins with plain `git clone` and does **not** recurse submo
 
 ### Mechanism
 
-- **`scripts/extract-nbx.sh <build-dir>`**: pure assembler, no network. Produces the standalone layout:
+- **`scripts/extract-nbx.sh <build-dir>`** (later folded into the generic `scripts/extract.sh nbx`, ADR [tools/0003](../tools/0003-generic-extraction-engine.md)): pure assembler, no network. Produces the standalone layout:
   - `bin/nbx`: with source paths rewritten from `$REPO_ROOT/lib/shell/{nbx,shared}/…` to the standalone `$LIB_DIR/…` (the `mcp`/`launcher` convention: `REPO_ROOT="$(dirname "$SCRIPT_DIR")"`, `LIB_DIR="$REPO_ROOT/lib"`).
   - `lib/`: `lib-*.bash`, `repl/nbx-cmd-*`, `cheatsheet.txt` from `lib/shell/nbx/`, **plus `lib/lib-cli.bash` vendored from `lib/shell/shared/lib-cli.bash`** (this is the single-source propagation: the copy is generated, never hand-edited).
   - `test/`: nbx bats + a portable `test_helper`.

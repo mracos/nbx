@@ -2,6 +2,18 @@
 
 CLI-first notebook for exploring JSON/CSV files. Uses `.ipynb` format but no Jupyter runtime - just bash, jq, and fzf.
 
+Live jq editor with structure-aware autocomplete and a running preview:
+
+![Live query editor with autocomplete](assets/nbx-autocomplete.png)
+
+Filters preview instantly, with your slots shown above the result:
+
+![Filtering with a live preview](assets/nbx-filter.png)
+
+Each accepted query becomes a named slot; steps stack into a notebook you can chain, edit, and save:
+
+![Notebook of chained slots](assets/nbx-notebook.png)
+
 ## Install
 
 **zinit** (as a command on your `$PATH`)
@@ -39,6 +51,33 @@ export PATH="$HOME/.nbx/bin:$PATH"
 - **Pipeline** - pipe one slot's output into the next query
 - **Notebook persistence** - save/load as `.ipynb`, viewable on GitHub and VS Code
 - **jq cheatsheet** - built-in reference, accessible mid-query with ctrl-r
+
+## Try it
+
+A demo dataset ships in `examples/transactions.json` (one month of personal
+transactions). Launch nbx on it and you drop straight into the live query editor,
+with a `querying transactions.json` hint at the top:
+
+```bash
+nbx examples/transactions.json
+```
+
+Queries to try (type them in the editor, watch the preview update):
+
+```jq
+.[] | .payee                              # every payee
+[.[] | select(.amount < 0)]               # expenses only
+[.[] | select(.category == "Groceries")]  # one category
+[.[] | select(.tags | index("food"))]     # by tag
+group_by(.category)
+  | map({category: .[0].category, total: (map(.amount) | add)})
+  | sort_by(.total)                        # spend per category
+[.[] | select(.cleared == false)]         # not yet cleared
+```
+
+Slots chain results: accept a query as `$s1`, then `set budget -100` and run
+`.[] | select(.amount < $budget)` to reuse the value. `ctrl-r` opens the jq
+cheatsheet mid-query; `help` lists every command; `ref full` adds the jq manual.
 
 ## Usage
 
@@ -135,7 +174,7 @@ Real JSON and NDJSON pass through untouched. For structured text (CSV, columns),
 
 ## Design decisions
 
-See `docs/adrs/nbx/`:
+See `docs/adrs/`:
 
 ## How it started
 
@@ -147,3 +186,7 @@ Started as "make me a small CLI to play with JSON files using jq." Evolved throu
 4. **Extraction candidate** - designed to eventually become a standalone tool (`mracos/nbx`)
 
 The key insight: Jupyter notebooks are the right *format* but the wrong *runtime* for this use case. nbx uses the format for portability while providing a data-aware UX that Jupyter frontends don't offer (live preview, structure autocomplete, row picking).
+
+## Provenance
+
+Read-only mirror, generated and kept in sync by CI. PRs here are cherry-picked upstream and synced back, so open a PR rather than editing directly.

@@ -1,0 +1,20 @@
+[
+  { "date": "2025-03-01", "payee": "Acme Payroll",       "category": "Income",        "amount": 4200.00, "account": "Checking", "cleared": true,  "tags": ["salary"] },
+  { "date": "2025-03-01", "payee": "Skyline Properties",  "category": "Rent",          "amount": -1450.00, "account": "Checking", "cleared": true,  "tags": ["housing", "fixed"] },
+  { "date": "2025-03-02", "payee": "Trader Joe's",        "category": "Groceries",     "amount": -86.42,  "account": "Credit",   "cleared": true,  "tags": ["food"] },
+  { "date": "2025-03-03", "payee": "Metro Transit",       "category": "Transport",     "amount": -34.00,  "account": "Credit",   "cleared": true,  "tags": ["commute"] },
+  { "date": "2025-03-04", "payee": "Blue Bottle",         "category": "Dining",        "amount": -6.75,   "account": "Credit",   "cleared": true,  "tags": ["coffee", "food"] },
+  { "date": "2025-03-05", "payee": "City Power & Light",  "category": "Utilities",     "amount": -112.30, "account": "Checking", "cleared": true,  "tags": ["fixed"] },
+  { "date": "2025-03-06", "payee": "Amazon",              "category": "Shopping",      "amount": -63.19,  "account": "Credit",   "cleared": false, "tags": ["online"] },
+  { "date": "2025-03-08", "payee": "Whole Foods",         "category": "Groceries",     "amount": -124.88, "account": "Credit",   "cleared": true,  "tags": ["food"] },
+  { "date": "2025-03-10", "payee": "Vanguard",            "category": "Savings",       "amount": -500.00, "account": "Checking", "cleared": true,  "tags": ["invest", "fixed"] },
+  { "date": "2025-03-11", "payee": "Ramen House",         "category": "Dining",        "amount": -28.40,  "account": "Credit",   "cleared": true,  "tags": ["food", "out"] },
+  { "date": "2025-03-12", "payee": "Netflix",             "category": "Entertainment", "amount": -15.49,  "account": "Credit",   "cleared": true,  "tags": ["subscription"] },
+  { "date": "2025-03-14", "payee": "Shell",               "category": "Transport",     "amount": -52.10,  "account": "Credit",   "cleared": true,  "tags": ["fuel", "commute"] },
+  { "date": "2025-03-15", "payee": "Freelance Co",        "category": "Income",        "amount": 850.00,  "account": "Checking", "cleared": false, "tags": ["side"] },
+  { "date": "2025-03-17", "payee": "Green Pharmacy",      "category": "Health",        "amount": -41.20,  "account": "Credit",   "cleared": true,  "tags": ["meds"] },
+  { "date": "2025-03-20", "payee": "Trader Joe's",        "category": "Groceries",     "amount": -73.15,  "account": "Credit",   "cleared": true,  "tags": ["food"] },
+  { "date": "2025-03-22", "payee": "Cine Downtown",       "category": "Entertainment", "amount": -32.00,  "account": "Credit",   "cleared": true,  "tags": ["out"] },
+  { "date": "2025-03-25", "payee": "City Power & Light",  "category": "Utilities",     "amount": -18.90,  "account": "Checking", "cleared": false, "tags": ["fixed"] },
+  { "date": "2025-03-28", "payee": "Ramen House",         "category": "Dining",        "amount": -31.60,  "account": "Credit",   "cleared": true,  "tags": ["food", "out"] }
+]

@@ -10,6 +10,7 @@ nbx_cmd_rename() {
   local new_name="${args#* }"
   old_name="${old_name#\$}"
   new_name="${new_name#\$}"
+  new_name=$(nbx_coerce_slot_name "$new_name") || return 1
   if [[ "$old_name" =~ ^[0-9]+$ ]] && [[ -f "$NBX_DIR/history/$old_name" ]]; then
     old_name=$(nbx_history_field "$old_name" slot)
   fi

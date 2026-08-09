@@ -162,6 +162,25 @@ esac
 STASH_EOF
   chmod +x "$stash_script"
 
+  # Tab helper: complete a stash line into the query, or fall back to replace-query.
+  # Kept in a script (not inline) because fzf's transform(...) parser matches on
+  # balanced parens and the case patterns ('[S'*) / *)) would close it prematurely.
+  local tab_script="$NBX_DIR/.tab.sh"
+  cat > "$tab_script" <<'TAB_EOF'
+#!/usr/bin/env bash
+line="$1"
+case "$line" in
+  '[S'*)
+    q=$(printf '%s' "$line" | sed 's/^\[S[0-9]*\] //; s/  [0-9].*//')
+    echo "change-query($q)+refresh-preview"
+    ;;
+  *)
+    echo "replace-query"
+    ;;
+esac
+TAB_EOF
+  chmod +x "$tab_script"
+
   # Reload script: prepends stash entries then query-prefixed suggestions
   local reload_script="$NBX_DIR/.reload.sh"
   cat > "$reload_script" <<'RELOAD_EOF'
@@ -193,8 +212,10 @@ fi
 RELOAD_EOF
   chmod +x "$reload_script"
 
+  # Source hint on its own line so the key legend keeps its full width (a combined
+  # single line overflows the terminal and fzf truncates the legend).
   local header="tab=complete │ ctrl-s=stash │ ctrl-n/b=cycle │ ctrl-f=full │ ctrl-r=ref │ enter=accept"
-  [[ -n "$context_label" ]] && header="$context_label │ $header"
+  [[ -n "$context_label" ]] && header="querying $context_label"$'\n'"$header"
 
   local preview_args="'$query_file' '$input_file' '$NBX_DIR/slots' '' '$lib_dir' '$stash_file' '$stash_idx_file'"
 
@@ -208,7 +229,7 @@ RELOAD_EOF
       --preview-window "bottom:45%:wrap" \
       --header "$header" \
       --bind "change:execute-silent(printf '%s' {q} > '$query_file')+execute-silent(echo 0 > '$stash_idx_file')+reload($reload_script {q} '$suggestions_file' '$stash_file')+refresh-preview" \
-      --bind "tab:transform(case {} in '[S'*) q=\$(echo {} | sed 's/^\[S[0-9]*\] //; s/  [0-9].*//'); echo \"change-query(\$q)+refresh-preview\" ;; *) echo replace-query ;; esac)" \
+      --bind "tab:transform(bash '$tab_script' {})" \
       --bind "ctrl-s:transform(bash '$stash_script' save '$query_file' '$input_file' '$NBX_DIR/slots' '$lib_dir' '$stash_file' '$stash_idx_file' '$reload_script' '$suggestions_file')" \
       --bind "ctrl-n:transform(bash '$stash_script' cycle +1 '$stash_file' '$stash_idx_file' '$query_file')" \
       --bind "ctrl-b:transform(bash '$stash_script' cycle -1 '$stash_file' '$stash_idx_file' '$query_file')" \

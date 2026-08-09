@@ -14,6 +14,8 @@ nbx_cmd_dup() {
   dup_target="${dup_target#\$}"
   if [[ -z "$dup_target" ]]; then
     dup_target=$(nbx_prompt_slot_name) || { warn "Cancelled"; return 1; }
+  else
+    dup_target=$(nbx_coerce_slot_name "$dup_target") || return 1
   fi
   cp "$NBX_DIR/slots/${dup_source}.json" "$NBX_DIR/slots/${dup_target}.json"
   nbx_push_history "$NBX_DIR/slots/${dup_source}.json" "dup \$${dup_source}" "$dup_target" "query"

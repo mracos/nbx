@@ -59,9 +59,9 @@ nbx_cmd_replay() {
       local slot
       slot=$(nbx_history_field "$step" slot)
       if _replay_report "$step" "$slot"; then
-        ((ok++))
+        ok=$((ok + 1))
       else
-        ((fail++))
+        fail=$((fail + 1))
       fi
     done <<< "$stale"
     nbx_mark_dirty
