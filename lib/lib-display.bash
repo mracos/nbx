@@ -29,21 +29,6 @@ info()   { echo "  $(dim "$*")"; }
 warn()   { echo "  ${_YELLOW}⚠ $*${_RST}" >&2; }
 result() { echo "  → $(slot "$1") ($2)"; }
 
-# --- Slot summary (moved from lib-jq.bash — display concern) ---
-
-nbx_slots_header() {
-  local slots
-  slots=$(nbx_list_slots)
-  [[ -z "$slots" ]] && return
-  local parts=()
-  while IFS= read -r s; do
-    local preview
-    preview=$(jq -c '.' "$NBX_DIR/slots/${s}.json" 2>/dev/null | head -c 30)
-    parts+=("\$$s=$preview")
-  done <<< "$slots"
-  info "Slots: ${parts[*]}"
-}
-
 # --- Notebook display ---
 
 nbx_show_notebook() {

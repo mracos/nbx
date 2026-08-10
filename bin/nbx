@@ -32,7 +32,7 @@ SCRIPT_DIR="${SOURCE%/*}"
 REPO_ROOT="${SCRIPT_DIR%/bin}"
 source "$REPO_ROOT/lib/lib-cli.bash" --auto-help "$@"
 
-command -v jq &>/dev/null || { echo "Error: jq is required" >&2; exit 1; }
+cli_require_jq
 cli_require_fzf
 
 LIB_DIR="$REPO_ROOT/lib"

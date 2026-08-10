@@ -136,7 +136,7 @@ nbx_resolve_file() {
     [[ "$(basename "$f")" == "$name" || "$f" == "$name" ]] && { echo "$f"; return 0; }
   done
   if [[ -f "$name" ]]; then
-    echo "$(cd "$(dirname "$name")" && pwd)/$(basename "$name")"
+    realpath "$name"
     return 0
   fi
   return 1

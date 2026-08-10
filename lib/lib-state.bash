@@ -248,19 +248,6 @@ nbx_reset() {
   nbx_init_state
 }
 
-# --- Input label (moved from lib-display.bash — state/path concern) ---
-
-nbx_input_label() {
-  local input="$1"
-  if [[ "$input" == "$NBX_DIR/slots/"* ]]; then
-    local sname
-    sname=$(basename "$input" .json)
-    echo "\$${sname#\$}"
-  else
-    basename "$input"
-  fi
-}
-
 # --- Hidden steps ---
 
 nbx_is_hidden() {
@@ -300,46 +287,8 @@ nbx_is_pinned() {
 }
 
 # --- Query stash (scratchpad) ---
-
-# Append a query to the stash. Dedup: skip if exact query exists.
-# Usage: nbx_stash_query <query> <rows> <type>
-nbx_stash_query() {
-  local query="${1//$'\t'/ }" rows="$2" type="$3"
-  local stash_file="$NBX_DIR/.stash"
-  # Dedup check
-  if [[ -f "$stash_file" ]]; then
-    while IFS=$'\t' read -r sq _; do
-      [[ "$sq" == "$query" ]] && return 1
-    done < "$stash_file"
-  fi
-  printf '%s\t%s\t%s\n' "$query" "$rows" "$type" >> "$stash_file"
-}
-
-nbx_stash_list() {
-  [[ -f "$NBX_DIR/.stash" ]] && cat "$NBX_DIR/.stash"
-}
-
-nbx_stash_count() {
-  [[ -f "$NBX_DIR/.stash" ]] || { echo "0"; return; }
-  wc -l < "$NBX_DIR/.stash" | tr -d ' '
-}
-
-# Get query field from stash entry N (1-indexed)
-nbx_stash_get() {
-  local n="$1"
-  [[ -f "$NBX_DIR/.stash" ]] || return 1
-  sed -n "${n}p" "$NBX_DIR/.stash" | cut -f1
-}
-
-# Delete stash entry N (1-indexed)
-nbx_stash_delete() {
-  local n="$1"
-  [[ -f "$NBX_DIR/.stash" ]] || return 1
-  # Portable in-place delete (BSD `sed -i ''` vs GNU `sed -i` differ; awk avoids it).
-  local tmp="$NBX_DIR/.stash.tmp"
-  awk -v n="$n" 'NR != n' "$NBX_DIR/.stash" > "$tmp" && mv "$tmp" "$NBX_DIR/.stash"
-  [[ -s "$NBX_DIR/.stash" ]] || rm -f "$NBX_DIR/.stash"
-}
+# The stash file is written and read inline by the fzf query-view
+# (lib-fzf.bash); nbx_stash_clear resets it on `nbx reset`.
 
 nbx_stash_clear() {
   rm -f "$NBX_DIR/.stash" "$NBX_DIR/.stash_idx"
