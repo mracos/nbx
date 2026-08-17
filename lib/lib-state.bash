@@ -55,10 +55,6 @@ nbx_save_slot() {
   fi
 }
 
-nbx_get_slot() {
-  cat "$NBX_DIR/slots/${1#\$}.json"
-}
-
 nbx_list_slots() {
   local f
   for f in "$NBX_DIR/slots"/*.json; do
@@ -114,13 +110,6 @@ nbx_pop_history() {
   local slot
   slot=$(nbx_history_field "$depth" slot)
   rm -f "$NBX_DIR/history/$depth" "$NBX_DIR/slots/${slot}.json"
-}
-
-nbx_peek_history() {
-  local depth
-  depth=$(nbx_history_depth)
-  [[ "$depth" -eq 0 ]] && return 1
-  cat "$NBX_DIR/history/$depth"
 }
 
 nbx_get_history() {

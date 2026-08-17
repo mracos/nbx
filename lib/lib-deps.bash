@@ -139,10 +139,6 @@ nbx_clear_stale() {
   [[ -s "$NBX_DIR/.stale" ]] || rm -f "$NBX_DIR/.stale"
 }
 
-nbx_clear_all_stale() {
-  rm -f "$NBX_DIR/.stale"
-}
-
 # Returns all stale step numbers, sorted ascending.
 nbx_stale_steps() {
   [[ -f "$NBX_DIR/.stale" ]] || return 0

@@ -18,7 +18,10 @@ nbx_cmd_dup() {
     dup_target=$(nbx_coerce_slot_name "$dup_target") || return 1
   fi
   cp "$NBX_DIR/slots/${dup_source}.json" "$NBX_DIR/slots/${dup_target}.json"
-  nbx_push_history "$NBX_DIR/slots/${dup_source}.json" "dup \$${dup_source}" "$dup_target" "query"
+  # A dup is identity over the source slot: record it as a real jq step so replay
+  # and ipynb round-trips reproduce the copy instead of executing a fake "dup $x"
+  # filter (which jq rejects and the import fallback materializes as a string).
+  nbx_push_history "$NBX_DIR/slots/${dup_source}.json" "." "$dup_target" "query"
   nbx_mark_dirty
   plain "$(slot "$dup_source") → $(slot "$dup_target") ($(nbx_slot_rows "$dup_target") rows)"
 }

@@ -184,13 +184,6 @@ _setup_pipeline() {
   assert [ ! -f "$NBX_DIR/.stale" ]
 }
 
-@test "nbx_clear_all_stale removes file" {
-  nbx_mark_stale 1
-  nbx_mark_stale 2
-  nbx_clear_all_stale
-  assert [ ! -f "$NBX_DIR/.stale" ]
-}
-
 @test "nbx_stale_steps returns sorted list" {
   nbx_mark_stale 3
   nbx_mark_stale 1

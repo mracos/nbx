@@ -24,12 +24,6 @@ teardown() {
   assert_output '{"a":1}'
 }
 
-@test "nbx_get_slot returns slot content" {
-  echo '{"b":2}' | nbx_save_slot "myslot"
-  run nbx_get_slot "myslot"
-  assert_output '{"b":2}'
-}
-
 @test "nbx_list_slots returns saved slots" {
   echo '{}' | nbx_save_slot "foo"
   echo '[]' | nbx_save_slot "bar"
@@ -98,16 +92,6 @@ teardown() {
 @test "nbx_pop_history on empty stack fails" {
   run nbx_pop_history
   assert_failure
-}
-
-@test "nbx_peek_history returns last entry" {
-  nbx_push_history "file1.json" ".name" "slot1"
-  nbx_push_history "file2.json" ".age" "slot2"
-  run nbx_peek_history
-  assert_success
-  assert_output --partial "file2.json"
-  assert_output --partial ".age"
-  assert_output --partial "slot2"
 }
 
 @test "nbx_get_history retrieves specific step" {

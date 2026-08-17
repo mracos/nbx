@@ -33,3 +33,25 @@ teardown() {
   assert_failure
   assert_output --partial "not found"
 }
+
+@test "nbx_cmd_dup records an identity step, not a fake dup filter" {
+  _create_test_step "original" '[1,2,3]'
+  nbx_cmd_dup "original copy"
+
+  run nbx_history_field 2 query
+  assert_output "."
+
+  run nbx_history_field 2 input
+  assert_output "$NBX_DIR/slots/original.json"
+}
+
+@test "nbx_cmd_dup step replays as a copy of the source" {
+  _create_test_step "original" '[1,2,3]'
+  nbx_cmd_dup "original copy"
+
+  echo '[9,9]' | nbx_save_slot "copy"
+  nbx_replay_step 2
+
+  run jq -c '.' "$NBX_DIR/slots/copy.json"
+  assert_output '[1,2,3]'
+}
