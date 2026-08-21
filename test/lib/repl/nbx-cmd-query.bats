@@ -194,8 +194,14 @@ teardown() {
 }
 
 # --- Startup auto-query (nbx_startup_query_target) ---
+#
+# These cover the decision, not the terminal check in front of it: `run`
+# inherits bats' stdin, so the real check answers yes on a developer's terminal
+# and no in CI. Stub it and the tests mean the same thing in both places; the
+# check itself is covered in lib-repl.bats against a real piped stdin.
 
 @test "startup auto-opens query on a single source, passing its basename" {
+  nbx_interactive() { return 0; }
   NBX_FILES=("$NBX_DIR/2025-03-07-personal.json")
 
   run nbx_startup_query_target
@@ -204,6 +210,7 @@ teardown() {
 }
 
 @test "startup auto-opens with the picker (empty arg) for multiple sources" {
+  nbx_interactive() { return 0; }
   NBX_FILES=("$NBX_DIR/a.json" "$NBX_DIR/b.json")
 
   run nbx_startup_query_target

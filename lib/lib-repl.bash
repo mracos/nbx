@@ -312,7 +312,16 @@ nbx_input_label() {
 # a basename when there's a single source, so the picker is skipped) and returns 0
 # to auto-open. Returns 1 to stay at the REPL: no sources, or resuming a notebook
 # that already has steps (history depth > 0) where the notebook view matters more.
+# Is there a human at the other end? Its own function so the startup decision
+# below stays testable: `run` inherits bats' stdin, which is a terminal when you
+# run the suite yourself and never one in CI.
+nbx_interactive() { [[ -t 0 ]]; }
+
 nbx_startup_query_target() {
+  # The query view is fzf, which reads /dev/tty regardless of stdin. Launching
+  # it without an interactive user blocks forever, so a piped or scripted run
+  # drops straight to the REPL (which then reads EOF and exits).
+  nbx_interactive || return 1
   [[ "$(nbx_history_depth)" -eq 0 ]] || return 1
   [[ ${#NBX_FILES[@]} -gt 0 ]] || return 1
   [[ ${#NBX_FILES[@]} -eq 1 ]] && printf '%s' "${NBX_FILES[0]##*/}"

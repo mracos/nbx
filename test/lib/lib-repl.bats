@@ -183,3 +183,17 @@ teardown() {
   assert_success
   assert [ ! -d "$NBX_DIR/sources" ]
 }
+
+@test "nbx_startup_query_target declines when stdin is not a terminal" {
+  # The startup query view is fzf, which grabs /dev/tty regardless of stdin.
+  # Launching it without an interactive user blocks forever, so a piped or
+  # scripted run must drop straight to the REPL instead.
+  NBX_FILES=("$BATS_TEST_TMPDIR/cmd1")
+  : > "${NBX_FILES[0]}"
+
+  run bash -c "source '$PROJECT_ROOT/lib/lib-repl.bash' 2>/dev/null
+    nbx_history_depth() { echo 0; }
+    NBX_FILES=('${NBX_FILES[0]}')
+    nbx_startup_query_target" </dev/null
+  assert_failure
+}
