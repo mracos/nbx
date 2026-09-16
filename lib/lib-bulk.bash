@@ -83,6 +83,18 @@ nbx_bulk_replay() {
       continue
     fi
 
+    # A hand-written CSV/TSV path needs the same mlr conversion `query` does
+    # before the filter runs. Lines nbx printed already name the converted
+    # source, so this only fires on a path typed into the bulk editor.
+    if nbx_is_tabular_file "$bulk_input"; then
+      if nbx_capture_tabular_file "$bulk_input"; then
+        bulk_input="$NBX_DIR/sources/$NBX_LAST_SOURCE_LABEL"
+      else
+        bulk_fail=$((bulk_fail + 1))
+        continue
+      fi
+    fi
+
     # Execute filter
     local bulk_err
     bulk_err=$(nbx_exec_jq "$bulk_filter" "$bulk_input" "${bulk_slot#\$}" 2>&1)

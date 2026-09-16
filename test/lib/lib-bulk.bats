@@ -177,3 +177,36 @@ EOF
   run nbx_history_depth
   assert_output "2"
 }
+
+@test "nbx_bulk_replay converts a CSV path written by hand" {
+  _stub_mlr '[{"name":"ana","age":31},{"name":"bruno","age":25}]'
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\nbruno,25\n' > "$csv"
+  NBX_FILES=()
+
+  local bulk_file="$NBX_DIR/.bulk"
+  cat > "$bulk_file" <<EOF
+$csv -> [.[] | select(.age > 30) | .name] -> \$grown
+EOF
+
+  run nbx_bulk_replay "$bulk_file"
+  assert_success
+
+  run jq -c '.' "$NBX_DIR/slots/grown.json"
+  assert_output '["ana"]'
+}
+
+@test "nbx_bulk_replay fails the step when a CSV cannot be converted" {
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\n' > "$csv"
+  NBX_FILES=()
+
+  local bulk_file="$NBX_DIR/.bulk"
+  cat > "$bulk_file" <<EOF
+$csv -> . -> \$rows
+EOF
+
+  PATH="$(_path_without_mlr)" run nbx_bulk_replay "$bulk_file"
+  assert_output --partial "miller"
+  assert_output --partial "0 ok, 1 failed"
+}
