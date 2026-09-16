@@ -287,3 +287,60 @@ teardown() {
   run nbx_history_depth
   assert_output "0"
 }
+
+@test "query re-converts a CSV that changed on disk" {
+  _stub_mlr '[{"name":"ana"}]'
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name\nana\n' > "$csv"
+  NBX_FILES=()
+  MOCK_QUERY='.'
+  MOCK_SLOT='rows'
+
+  nbx_capture_tabular_file "$csv"
+
+  # The file grows a row, and the stub starts returning it. The snapshot is
+  # backdated rather than the file touched: bash 3.2 compares -nt in whole
+  # seconds, so same-second edits would make this flaky.
+  printf 'name\nana\nbruno\n' > "$csv"
+  touch -t 202001010000 "$NBX_DIR/sources/users"
+  _stub_mlr '[{"name":"ana"},{"name":"bruno"}]'
+
+  run nbx_cmd_query "users"
+  assert_success
+  assert_output --partial "changed on disk"
+
+  run jq -c '[.[].name]' "$NBX_DIR/slots/rows.json"
+  assert_output '["ana","bruno"]'
+}
+
+@test "query leaves an unchanged CSV source alone" {
+  _stub_mlr '[{"name":"ana"}]'
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name\nana\n' > "$csv"
+  NBX_FILES=()
+  MOCK_QUERY='.'
+  MOCK_SLOT='rows'
+
+  nbx_capture_tabular_file "$csv"
+
+  run nbx_cmd_query "users"
+  assert_success
+  refute_output --partial "changed on disk"
+}
+
+@test "query reports a source that is gone instead of running its path" {
+  local json="$BATS_TEST_TMPDIR/data.json"
+  echo '[1,2,3]' > "$json"
+  NBX_FILES=("$json")
+  MOCK_QUERY='.'
+  MOCK_SLOT='rows'
+  command rm -f "$json"
+
+  run nbx_cmd_query "data.json"
+  assert_failure
+  assert_output --partial "Source is gone"
+  refute_output --partial "Running:"
+
+  run nbx_history_depth
+  assert_output "0"
+}

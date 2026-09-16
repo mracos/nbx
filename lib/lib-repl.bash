@@ -162,7 +162,28 @@ nbx_capture_tabular_file() {
   label="${f##*/}"
   label="${label%.*}"
   [[ -e "$NBX_DIR/sources/$label" ]] && label=$(nbx_next_command_label)
-  nbx_capture_one_command "$(nbx_tabular_command "$path")" "$label"
+  nbx_capture_one_command "$(nbx_tabular_command "$path")" "$label" || return 1
+  nbx_source_file_add "$NBX_LAST_SOURCE_LABEL" "$path"
+}
+
+# True when the file a source was converted from has changed since. jq reads a
+# JSON source from disk on every query, so a CSV that only updates on `refresh`
+# would quietly answer from stale rows.
+nbx_tabular_outdated() {
+  local label="$1" path
+  path=$(nbx_source_file_get "$label")
+  [[ -n "$path" && -f "$path" ]] || return 1
+  [[ "$path" -nt "$NBX_DIR/sources/$label" ]]
+}
+
+# True when a path is one of the session's sources. Tells a source that has been
+# deleted or moved (warn) from a shell command to run (ADR 0010).
+nbx_is_loaded_source() {
+  local path="$1" f
+  for f in ${NBX_FILES[@]+"${NBX_FILES[@]}"}; do
+    [[ "$f" == "$path" ]] && return 0
+  done
+  return 1
 }
 
 # Capture several tabular files (launch-arg path).

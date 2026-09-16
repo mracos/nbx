@@ -285,3 +285,48 @@ teardown() {
   assert_output --partial "miller"
   assert [ ! -e "$NBX_DIR/sources/users" ]
 }
+
+@test "nbx_tabular_outdated is true only after the file changes" {
+  _stub_mlr
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name\nana\n' > "$csv"
+  NBX_FILES=()
+
+  nbx_capture_tabular_file "$csv"
+  run nbx_tabular_outdated users
+  assert_failure
+
+  touch -t 202001010000 "$NBX_DIR/sources/users"
+  run nbx_tabular_outdated users
+  assert_success
+}
+
+@test "nbx_tabular_outdated is false for a source with no recorded file" {
+  mkdir -p "$NBX_DIR/sources"
+  : > "$NBX_DIR/sources/cmd1"
+
+  run nbx_tabular_outdated cmd1
+  assert_failure
+}
+
+@test "nbx_tabular_outdated is false once the file is gone" {
+  _stub_mlr
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name\nana\n' > "$csv"
+  NBX_FILES=()
+
+  nbx_capture_tabular_file "$csv"
+  command rm -f "$csv"
+
+  run nbx_tabular_outdated users
+  assert_failure
+}
+
+@test "nbx_is_loaded_source knows the session's sources" {
+  NBX_FILES=("$BATS_TEST_TMPDIR/a.json")
+
+  run nbx_is_loaded_source "$BATS_TEST_TMPDIR/a.json"
+  assert_success
+  run nbx_is_loaded_source "$BATS_TEST_TMPDIR/b.json"
+  assert_failure
+}

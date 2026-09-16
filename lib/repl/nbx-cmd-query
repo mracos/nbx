@@ -15,6 +15,12 @@ nbx_cmd_query() {
         warn "Not found: $args"
         return 1
       fi
+      # A source that was loaded and has since moved or been deleted: running
+      # its path as a shell command would be nonsense.
+      if nbx_is_loaded_source "$input_file"; then
+        warn "Source is gone: $input_file"
+        return 1
+      fi
       info "Running: $args"
       NBX_LAST_SOURCE_LABEL=""
       nbx_capture_one_command "$args" || return 1
@@ -29,6 +35,14 @@ nbx_cmd_query() {
     input_file="$NBX_DIR/sources/$NBX_LAST_SOURCE_LABEL"
     nbx_mark_dirty
   fi
+  # jq reads a JSON source from disk on every query; a tabular source is a
+  # snapshot, so it re-converts when the file changed since it was taken.
+  local input_label="${input_file##*/}"
+  if [[ "$input_file" == "$NBX_DIR/sources/"* ]] && nbx_tabular_outdated "$input_label"; then
+    info "$input_label: file changed on disk"
+    nbx_cmd_refresh "$input_label" || true
+  fi
+
   local raw_query
   raw_query=$(nbx_fzf_query "$input_file" "." "$(nbx_input_label "$input_file")") || return 1
   local hide=false query="$raw_query"

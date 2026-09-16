@@ -137,6 +137,10 @@ Landed (2026-09-15), the smallest slice that makes CSV usable:
 - `.csv`/`.tsv` files load as sources, converted with `mlr --i{csv,tsv} --ojson cat`
 - The conversion is a command source (ADR 0010), so `refresh` re-reads the file and
   `save` snapshots the JSON. Label is the filename minus its extension
+- A query re-converts a source whose file changed, since jq reads a JSON source
+  live and a snapshot that only moves on `refresh` would answer from stale rows.
+  Only for files converted in this session: re-running a command stored in a
+  notebook would put shell back on the open path that ADR 0010 took it off
 - Missing `mlr` skips the file with a warning; jq-on-JSON is unaffected
 
 Not implemented: everything that makes the engine *pluggable*. Queries are still jq

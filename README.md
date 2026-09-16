@@ -149,8 +149,10 @@ nbx› query users.csv               # in-REPL    → source "users", then jq ed
 
 The source is named after the file without its extension, and it is a command
 source like any other: the `mlr` conversion is stored, so `refresh users` re-reads
-the file from disk, and `save` snapshots the JSON into the notebook. Rows come out
-as objects keyed by header, with numbers left as numbers:
+the file from disk, and `save` snapshots the JSON into the notebook. A query also
+re-converts on its own when the file changed since the snapshot, so a CSV reads as
+live as a JSON file does. Rows come out as objects keyed by header, with numbers
+left as numbers:
 
 ```
 .[] | select(.age > 30) | {name, city}

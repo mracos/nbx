@@ -418,3 +418,27 @@ teardown() {
   assert_line $'cmd1\tone'
   assert_line $'cmd2\ttwo'
 }
+
+# --- Tabular source inputs (ADR 0009) ---
+
+@test "nbx_source_file_add records the file a source was converted from" {
+  nbx_source_file_add "users" "/tmp/users.csv"
+
+  run nbx_source_file_get "users"
+  assert_output "/tmp/users.csv"
+}
+
+@test "nbx_source_file_add dedups by label" {
+  nbx_source_file_add "users" "/tmp/old.csv"
+  nbx_source_file_add "users" "/tmp/new.csv"
+
+  run nbx_source_file_get "users"
+  assert_output "/tmp/new.csv"
+  run grep -c '' "$NBX_DIR/.srcfiles"
+  assert_output "1"
+}
+
+@test "nbx_source_file_get is empty for an unknown label" {
+  run nbx_source_file_get "nope"
+  assert_output ""
+}

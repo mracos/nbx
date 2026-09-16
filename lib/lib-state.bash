@@ -328,3 +328,26 @@ nbx_is_command_source() {
   local label="$1"
   [[ -f "$NBX_DIR/.commands" ]] && grep -q "^${label}"$'\t' "$NBX_DIR/.commands"
 }
+
+# --- Tabular source inputs (ADR 0009) ---
+# Maps a source label to the file it was converted from, so a query can notice
+# the file changed on disk. Session-only on purpose: it is not written to the
+# notebook, so opening one never re-runs a conversion by itself (ADR 0010).
+# Entry format: label\tpath
+
+nbx_source_file_add() {
+  local label="$1" path="${2//$'\t'/ }"
+  path="${path//$'\n'/ }"
+  local f="$NBX_DIR/.srcfiles"
+  if [[ -f "$f" ]]; then
+    grep -v "^${label}"$'\t' "$f" > "$f.tmp" 2>/dev/null || true
+    mv "$f.tmp" "$f"
+  fi
+  printf '%s\t%s\n' "$label" "$path" >> "$f"
+}
+
+nbx_source_file_get() {
+  local label="$1"
+  [[ -f "$NBX_DIR/.srcfiles" ]] || return 0
+  awk -F'\t' -v l="$label" '$1 == l { print $2; exit }' "$NBX_DIR/.srcfiles"
+}
