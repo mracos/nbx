@@ -1,6 +1,6 @@
 # nbx - Interactive jq notebook
 
-CLI-first notebook for exploring JSON/CSV files. Uses `.ipynb` format but no Jupyter runtime - just bash, jq, and fzf.
+CLI-first notebook for exploring JSON and CSV files. Uses `.ipynb` format but no Jupyter runtime - just bash, jq, and fzf (plus miller for CSV/TSV).
 
 Live jq editor with structure-aware autocomplete and a running preview:
 
@@ -41,6 +41,7 @@ export PATH="$HOME/.nbx/bin:$PATH"
 - **bash** 3.2+ (macOS stock bash works)
 - **[jq](https://jqlang.github.io/jq/)** - JSON query engine (required)
 - **[fzf](https://github.com/junegunn/fzf)** - interactive query editor and pickers (required)
+- **[miller](https://miller.readthedocs.io/)** (`mlr`) - CSV/TSV sources only; without it, JSON still works
 
 ## What it does
 
@@ -129,7 +130,35 @@ refresh cmd1       Re-run just that source
 
 **Non-JSON output is auto-wrapped.** jq only speaks JSON, so if a command emits plain text, nbx wraps its lines into a JSON string array (`["line1","line2",…]`) so the source is immediately queryable (`.[] | select(test("..."))`).
 
-Real JSON and NDJSON pass through untouched. For structured text (CSV, columns), still convert in the command for richer shape, e.g. `nbx 'mlr --icsv --ojson cat x.csv'` or `nbx 'ps aux | tail -n+2 | jq -Rn "[inputs|split(\" +\";\"\")]"'`.
+Real JSON and NDJSON pass through untouched. For structured text with no dedicated
+reader (columns, logs), convert in the command for richer shape, e.g.
+`nbx 'ps aux | tail -n+2 | jq -Rn "[inputs|split(\" +\";\"\")]"'`.
+
+### CSV and TSV sources
+
+`.csv` and `.tsv` files are read through [miller](https://miller.readthedocs.io/),
+which turns them into the JSON everything downstream already speaks
+(see [ADR 0009](docs/adrs/0009-nbx-pluggable-engines.md)):
+
+```bash
+nbx users.csv                      # launch arg → source "users"
+```
+```
+nbx› query users.csv               # in-REPL    → source "users", then jq editor
+```
+
+The source is named after the file without its extension, and it is a command
+source like any other: the `mlr` conversion is stored, so `refresh users` re-reads
+the file from disk, and `save` snapshots the JSON into the notebook. Rows come out
+as objects keyed by header, with numbers left as numbers:
+
+```
+.[] | select(.age > 30) | {name, city}
+```
+
+Without `mlr` installed, a CSV arg reports the missing dependency and is skipped;
+everything else keeps working. The query language is still jq: per-engine query
+syntax (`mlr filter`, SQL) is the rest of ADR 0009 and is not implemented yet.
 
 ## Commands
 

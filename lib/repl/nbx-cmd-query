@@ -22,6 +22,13 @@ nbx_cmd_query() {
       nbx_mark_dirty
     fi
   fi
+  # A CSV/TSV path is converted to JSON before jq ever sees it (ADR 0009), and
+  # the converted source replaces it as the query input.
+  if nbx_is_tabular_file "$input_file"; then
+    nbx_capture_tabular_file "$input_file" || return 1
+    input_file="$NBX_DIR/sources/$NBX_LAST_SOURCE_LABEL"
+    nbx_mark_dirty
+  fi
   local raw_query
   raw_query=$(nbx_fzf_query "$input_file" "." "$(nbx_input_label "$input_file")") || return 1
   local hide=false query="$raw_query"

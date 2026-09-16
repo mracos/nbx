@@ -130,6 +130,20 @@ orders.json -> .[] | select(.total > 100) -> $big_orders
 
 Unchanged: pick, show, set, dup, hide, move, delete, rename, back, deps.
 
+## Implementation status
+
+Landed (2026-09-15), the smallest slice that makes CSV usable:
+
+- `.csv`/`.tsv` files load as sources, converted with `mlr --i{csv,tsv} --ojson cat`
+- The conversion is a command source (ADR 0010), so `refresh` re-reads the file and
+  `save` snapshots the JSON. Label is the filename minus its extension
+- Missing `mlr` skips the file with a warning; jq-on-JSON is unaffected
+
+Not implemented: everything that makes the engine *pluggable*. Queries are still jq
+only, so there is no `engine-<name>.bash` contract, no `-e` flag, no `[engine]` tag in
+bulk, and no `engine` field in history or cell metadata. Those formats are unchanged,
+which keeps the migration notes above valid for whenever the rest lands.
+
 ## Consequences
 
 - CSV/TSV files work as first-class nbx sources

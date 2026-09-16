@@ -106,3 +106,29 @@ _path_without() {
   run bash -c "'$NBX_CLI' '$f' </dev/null"
   assert_output --partial "$(basename "$f")"
 }
+
+# --- Tabular sources (ADR 0009) ---
+
+@test "nbx loads a CSV through mlr as a source named after the file" {
+  # Stubbed: CI has no miller, and what matters is that nbx routes the file
+  # through it instead of handing the CSV bytes to jq.
+  local stub="$BATS_TEST_TMPDIR/stub-bin"
+  mkdir -p "$stub"
+  cat > "$stub/mlr" <<'STUB'
+#!/usr/bin/env bash
+echo '[{"name":"ana","age":31}]'
+STUB
+  chmod +x "$stub/mlr"
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\n' > "$csv"
+
+  PATH="$stub:$PATH" run bash -c "'$NBX_CLI' '$csv' </dev/null"
+  assert_output --partial "users"
+  assert_output --partial "mlr --icsv --ojson cat"
+}
+
+@test "nbx --help documents CSV support" {
+  run "$NBX_CLI" --help
+  assert_success
+  assert_output --partial ".csv"
+}

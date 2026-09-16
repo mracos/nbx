@@ -239,3 +239,51 @@ teardown() {
   run nbx_startup_query_target
   assert_failure
 }
+
+# --- Tabular sources (ADR 0009) ---
+
+@test "query on a CSV path converts it before jq sees it" {
+  _stub_mlr '[{"name":"ana","age":31},{"name":"bruno","age":25}]'
+
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\nbruno,25\n' > "$csv"
+  MOCK_QUERY='[.[] | select(.age > 30) | .name]'
+  MOCK_SLOT='grown'
+  NBX_FILES=()
+
+  run nbx_cmd_query "$csv"
+  assert_success
+
+  run jq -c '.' "$NBX_DIR/slots/grown.json"
+  assert_output '["ana"]'
+}
+
+@test "query records the converted source, not the CSV path, in history" {
+  _stub_mlr
+
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name\nana\n' > "$csv"
+  MOCK_QUERY='.'
+  MOCK_SLOT='rows'
+  NBX_FILES=()
+
+  nbx_cmd_query "$csv"
+
+  run nbx_history_field 1 input
+  assert_output "$NBX_DIR/sources/users"
+}
+
+@test "query on a CSV fails cleanly without miller" {
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name\nana\n' > "$csv"
+  MOCK_QUERY='.'
+  MOCK_SLOT='rows'
+  NBX_FILES=()
+
+  PATH="$(_path_without_mlr)" run nbx_cmd_query "$csv"
+  assert_failure
+  assert_output --partial "miller"
+
+  run nbx_history_depth
+  assert_output "0"
+}

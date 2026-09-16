@@ -197,3 +197,91 @@ teardown() {
     nbx_startup_query_target" </dev/null
   assert_failure
 }
+
+# --- Tabular sources (CSV/TSV, ADR 0009) ---
+
+@test "nbx_is_tabular_file matches csv and tsv only" {
+  run nbx_is_tabular_file "users.csv"
+  assert_success
+  run nbx_is_tabular_file "users.TSV"
+  assert_success
+  run nbx_is_tabular_file "users.json"
+  assert_failure
+}
+
+@test "nbx_tabular_command picks the reader from the extension" {
+  run nbx_tabular_command "/tmp/users.csv"
+  assert_output "mlr --icsv --ojson cat /tmp/users.csv"
+
+  run nbx_tabular_command "/tmp/users.tsv"
+  assert_output --partial "--itsv"
+}
+
+@test "nbx_capture_tabular_file loads a CSV as a JSON source named after the file" {
+  _stub_mlr
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\n' > "$csv"
+  NBX_FILES=()
+
+  nbx_capture_tabular_file "$csv"
+
+  assert [ -f "$NBX_DIR/sources/users" ]
+  run jq -c '.[0].name' "$NBX_DIR/sources/users"
+  assert_output '"ana"'
+  assert_equal "$NBX_LAST_SOURCE_LABEL" "users"
+  assert_equal "${NBX_FILES[0]}" "$NBX_DIR/sources/users"
+
+  run cat "$STUB_MLR_ARGV"
+  assert_output --partial "--icsv --ojson cat"
+}
+
+@test "nbx_capture_tabular_file stores the mlr command so refresh can re-run it" {
+  _stub_mlr
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\n' > "$csv"
+  NBX_FILES=()
+
+  nbx_capture_tabular_file "$csv"
+
+  run nbx_source_cmd_get users
+  assert_output --partial "mlr --icsv --ojson cat"
+  assert_output --partial "$csv"
+}
+
+@test "nbx_capture_tabular_file reuses the source when the same file is loaded twice" {
+  _stub_mlr
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\n' > "$csv"
+  NBX_FILES=()
+
+  nbx_capture_tabular_file "$csv"
+  nbx_capture_tabular_file "$csv"
+
+  assert_equal "$NBX_LAST_SOURCE_LABEL" "users"
+  assert [ ! -e "$NBX_DIR/sources/cmd1" ]
+}
+
+@test "nbx_capture_tabular_file falls back to cmdN when the label is taken" {
+  _stub_mlr
+  mkdir -p "$NBX_DIR/sources"
+  : > "$NBX_DIR/sources/users"
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\n' > "$csv"
+  NBX_FILES=()
+
+  nbx_capture_tabular_file "$csv"
+
+  assert_equal "$NBX_LAST_SOURCE_LABEL" "cmd1"
+}
+
+@test "nbx_capture_tabular_file reports the missing dependency instead of loading" {
+  local csv="$BATS_TEST_TMPDIR/users.csv"
+  printf 'name,age\nana,31\n' > "$csv"
+  NBX_FILES=()
+
+  PATH="$(_path_without_mlr)" run nbx_capture_tabular_file "$csv"
+
+  assert_failure
+  assert_output --partial "miller"
+  assert [ ! -e "$NBX_DIR/sources/users" ]
+}

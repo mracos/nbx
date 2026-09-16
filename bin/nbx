@@ -10,6 +10,8 @@
 #
 # Each positional arg is a source: an existing file is read as data, anything
 # else is run as a command and its output captured (quote it: nbx 'gh api /x').
+# A .csv/.tsv file is read through mlr, which needs miller installed; it loads
+# under its extensionless name (users.csv -> source "users").
 # Command sources snapshot their output into the notebook, so reload never runs
 # shell. A command source stores its command: `refresh` re-runs it. Add more
 # mid-session with `query <command>`. nbx does not read piped input. See ADR
@@ -20,6 +22,7 @@
 #   $ nbx analysis.ipynb *.json         Save analysis to notebook
 #   $ nbx analysis.ipynb                Resume saved analysis
 #   $ nbx 'gh api /user/repos'          Explore command output
+#   $ nbx users.csv                     Explore a CSV (converted with mlr)
 #
 # REPL commands (type 'help' inside):
 #   query, pick, set, refresh, show, edit, replay, rename, hide, delete, ref, save, reset, quit
@@ -69,9 +72,12 @@ nbx_abspath() {
 # --- Parse args: each positional is a notebook, a file source, or a command ---
 # A non-.ipynb arg is a file source if it exists, otherwise it's run as a command
 # (ADR 0010). Quote commands so the shell passes them as one arg: nbx 'gh api /x'.
+# An existing .csv/.tsv is held aside: jq can't read it, so it is loaded through
+# mlr as a command source once the notebook has claimed its labels (ADR 0009).
 NBX_NOTEBOOK=""
 NBX_FILES=()
 NBX_CMDS=()
+NBX_TABULAR=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -79,7 +85,11 @@ while [[ $# -gt 0 ]]; do
       NBX_NOTEBOOK="$(nbx_abspath "$1")" ;;
     *)
       if [[ -f "$1" ]]; then
-        NBX_FILES+=("$(nbx_abspath "$1")")
+        if nbx_is_tabular_file "$1"; then
+          NBX_TABULAR+=("$(nbx_abspath "$1")")
+        else
+          NBX_FILES+=("$(nbx_abspath "$1")")
+        fi
       else
         NBX_CMDS+=("$1")
       fi ;;
@@ -118,6 +128,7 @@ fi
 # Command args become re-runnable sources recorded in .commands so `save` can
 # persist them and `refresh` can re-run them.
 nbx_capture_command_sources ${NBX_CMDS[@]+"${NBX_CMDS[@]}"}
+nbx_capture_tabular_sources ${NBX_TABULAR[@]+"${NBX_TABULAR[@]}"}
 
 NBX_DIRTY=false
 

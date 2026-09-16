@@ -89,7 +89,7 @@ nbx_wrap_if_not_json() {
 # NBX_LAST_SOURCE_LABEL (a global, since command substitution would lose the
 # NBX_FILES mutation in a subshell) and returns 0.
 nbx_capture_one_command() {
-  local cmd="$1"
+  local cmd="$1" label="${2:-}"
   mkdir -p "$NBX_DIR/sources"
 
   # Dedup: an identical command reuses its existing source (refresh to re-run),
@@ -102,8 +102,8 @@ nbx_capture_one_command() {
     return 0
   fi
 
-  local label out
-  label=$(nbx_next_command_label)
+  local out
+  [[ -n "$label" ]] || label=$(nbx_next_command_label)
   out="$NBX_DIR/sources/$label"
   if eval "$cmd" > "$out" 2>/dev/null && [[ -s "$out" ]]; then
     nbx_wrap_if_not_json "$out" "$label"
@@ -123,6 +123,53 @@ nbx_capture_command_sources() {
   local cmd
   for cmd in "$@"; do
     nbx_capture_one_command "$cmd" || true
+  done
+  return 0
+}
+
+# --- Tabular sources (CSV/TSV) ---
+
+nbx_is_tabular_file() {
+  case "$1" in
+    *.csv | *.CSV | *.tsv | *.TSV) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The mlr invocation that turns one tabular file into the JSON every slot and
+# every jq filter already speaks (ADR 0009: engines differ, slots stay JSON).
+nbx_tabular_command() {
+  local f="$1" reader="--icsv"
+  case "$f" in
+    *.tsv | *.TSV) reader="--itsv" ;;
+  esac
+  printf 'mlr %s --ojson cat %q' "$reader" "$f"
+}
+
+# Load a CSV/TSV as a command source, so the conversion is re-runnable: the
+# stored mlr command is what `refresh` re-runs, picking up edits to the file.
+# Labelled after the file minus its extension (users.csv -> "users"), which
+# keeps it typeable and, more importantly, keeps the loaded source from looking
+# tabular itself and being converted a second time.
+nbx_capture_tabular_file() {
+  local f="$1"
+  if ! command -v mlr > /dev/null 2>&1; then
+    warn "${f##*/}: CSV/TSV needs miller (brew install miller)"
+    return 1
+  fi
+  local path label
+  path=$(realpath "$f" 2> /dev/null) || path="$f"
+  label="${f##*/}"
+  label="${label%.*}"
+  [[ -e "$NBX_DIR/sources/$label" ]] && label=$(nbx_next_command_label)
+  nbx_capture_one_command "$(nbx_tabular_command "$path")" "$label"
+}
+
+# Capture several tabular files (launch-arg path).
+nbx_capture_tabular_sources() {
+  local f
+  for f in "$@"; do
+    nbx_capture_tabular_file "$f" || true
   done
   return 0
 }
@@ -162,13 +209,17 @@ nbx_pick_input() {
     done <<< "$slots"
   fi
 
-  # Other JSON files in current directory (not already loaded)
+  # Other data files in current directory (not already loaded). A tabular file
+  # loads under its extensionless label (see nbx_capture_tabular_file), so both
+  # spellings count as "already loaded".
   local dir_file
-  for dir_file in *.json; do
+  for dir_file in *.json *.csv *.tsv; do
     [[ -f "$dir_file" ]] || continue
+    local label="$dir_file"
+    nbx_is_tabular_file "$dir_file" && label="${dir_file%.*}"
     local already=false
     for f in "${NBX_FILES[@]}"; do
-      [[ "$(basename "$f")" == "$dir_file" ]] && { already=true; break; }
+      [[ "${f##*/}" == "$dir_file" || "${f##*/}" == "$label" ]] && { already=true; break; }
     done
     $already || items+=("$dir_file")
   done

@@ -29,3 +29,40 @@ _create_test_notebook() {
     cells: $cells
   }' > "$outfile"
 }
+
+# --- Tabular sources (ADR 0009) ---
+
+# CSV/TSV support shells out to mlr, which CI does not have and which these
+# tests are not trying to verify: what matters is that nbx routes the file
+# through it. The stub records its argv in $STUB_MLR_ARGV and emits the JSON a
+# real conversion would.
+# Usage: _stub_mlr [json]
+_stub_mlr() {
+  local json="$1"
+  # Not a ${1:-default}: bash ends that expansion at the first '}' in the
+  # default, which a JSON literal is full of.
+  [[ -n "$json" ]] || json='[{"name":"ana","age":31}]'
+  local bin="$BATS_TEST_TMPDIR/stub-bin"
+  mkdir -p "$bin"
+  {
+    echo '#!/usr/bin/env bash'
+    echo 'printf "%s\n" "$*" > "$STUB_MLR_ARGV"'
+    printf 'cat <<%s\n%s\nJSON\n' "'JSON'" "$json"
+  } > "$bin/mlr"
+  chmod +x "$bin/mlr"
+  export STUB_MLR_ARGV="$BATS_TEST_TMPDIR/mlr-argv"
+  export PATH="$bin:$PATH"
+}
+
+# $PATH minus every directory that holds an mlr, so the missing-dependency path
+# is exercised on a machine that does have miller. Dropping the whole PATH
+# instead would break realpath/mkdir and test nothing.
+_path_without_mlr() {
+  local d out=()
+  local IFS=:
+  for d in $PATH; do
+    [[ -x "$d/mlr" ]] && continue
+    out+=("$d")
+  done
+  printf '%s' "${out[*]}"
+}
