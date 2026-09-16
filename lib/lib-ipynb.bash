@@ -151,6 +151,11 @@ nbx_ipynb_save() {
   local cmdsrc_file="$NBX_DIR/.save_cmdsrc.json"
   printf '%s' "$sources_json" > "$sources_file"
   printf '%s' "$command_sources_json" > "$cmdsrc_file"
+  # A session with no steps leaves the cells dir empty, where the glob stays
+  # literal and jq is handed a *.json that does not exist. /dev/null slurps to
+  # the same [] the notebook wants, with no error on the way.
+  local cell_files=("$cells_dir"/*.json)
+  [[ -f "${cell_files[0]}" ]] || cell_files=(/dev/null)
   jq -s \
     --slurpfile sources "$sources_file" \
     --slurpfile command_sources "$cmdsrc_file" \
@@ -170,7 +175,7 @@ nbx_ipynb_save() {
         }
       },
       cells: .
-    }' "$cells_dir"/*.json > "$tmp_notebook"
+    }' "${cell_files[@]}" > "$tmp_notebook"
   rm -f "$sources_file" "$cmdsrc_file"
 
   # Atomic write: only replace notebook if save succeeded

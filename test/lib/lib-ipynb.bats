@@ -499,3 +499,20 @@ teardown() {
   assert_output "bob"
   rm -rf "$reloaded"
 }
+
+@test "nbx_ipynb_save writes an empty notebook with no steps, without jq noise" {
+  # Sources can exist before the first query (nbx file.json, then save), so a
+  # zero-step save is a normal state, not an error.
+  local nb="$NBX_DIR/test.ipynb"
+  local src="$NBX_DIR/input.json"
+  echo '[{"name":"alice"}]' > "$src"
+  NBX_FILES=("$src")
+
+  run nbx_ipynb_save "$nb"
+  assert_success
+  refute_output --partial "Could not open file"
+  refute_output --partial "Save failed"
+
+  run jq -c '[(.cells | length), (.metadata.nbx.sources | length)]' "$nb"
+  assert_output "[0,1]"
+}
